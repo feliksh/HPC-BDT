@@ -63,17 +63,49 @@ public:
 
 };
 
-template <typename T, unsigned short d>
+template <unsigned short d>
 struct dt{
     // TODO: usare matrice invece di 2 vettori per spazialita cache
     unsigned int features[d];
-    unsigned int cuts[d];
-    T predictions[1<<d]; //size 2^d
+    float cuts[d];
+    int predictions[1<<d]; //size 2^d
 
-    T predict(float x[]){
+    dt(){
+        memset(features, 0, d*sizeof(unsigned int));
+        memset(cuts, 0, d*sizeof(float));
+        memset(predictions, 0, (1<<d)*sizeof(float));
+    }
+
+    void fill_level(unsigned int feat, float cut, short level){
+        features[level] = feat;
+        cuts[level] = cut;
+    }
+
+    void update_predictions(unsigned short L[], std::vector<int>& response, int N){
+        int count[1<<d];
+        memset(count, 0, (1<<d)*sizeof(int));
+        for(int i=0; i<N; ++i){
+            predictions[L[i]] += response[i];
+            ++count[L[i]];
+        }
+        for(int i=0; i<(1<<d); ++i) {
+            if (count[i] > 0)
+                predictions[i] /= count[i];
+            // std::cout << "lv " << i << ": " << count[i] << std::endl;
+        }
+        std::cout << std::endl;
+    }
+
+    void printer(){
+        for(int i=0; i<d; ++i) std::cout << features[i] << "\t-> " << cuts[i] << std::endl;
+        for(int i=0; i<(1<<d); ++i) std::cout << predictions[i] << " ";
+        std::cout << std::endl;
+    }
+
+    float predict(float* x, int id, int N){
         unsigned int idx = 0;
         for(unsigned i=0; i<d; ++i){
-            if (x[features[i]] <= cuts[i])
+            if (x[(features[i]*N)+id] <= cuts[i])
                 idx = (idx << 1) | 1;
         }
         return predictions[idx];
