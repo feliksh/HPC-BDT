@@ -81,7 +81,7 @@ struct dt{
         cuts[level] = cut;
     }
 
-    void update_predictions(unsigned short L[], std::vector<int>& response, int N){
+    void update_predictions(short L[], std::vector<int>& response, int N){
         int count[1<<d];
         memset(count, 0, (1<<d)*sizeof(int));
         for(int i=0; i<N; ++i){

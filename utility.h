@@ -5,7 +5,7 @@
 #define swape(x,y){temp=x;x=y;y=temp;}
 
 // odd-even sort in sequential mode
-void sequential_sort(float *data, unsigned int size){
+void sequential_sort(std::vector<float>& data, unsigned int size){
     bool isSorted = false;
     float temp;
     while (!isSorted){
