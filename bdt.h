@@ -8,8 +8,12 @@
 #include <vector>
 #include <malloc.h>
 #include <tuple>
+#include <omp.h>
 #include "structs.h"
 #include "utility.h"
+
+#define go_parallel true
+#define go_parallel2 false
 
 typedef std::vector<std::vector<float>> matrix;
 typedef std::vector<std::vector<int>> imatrix;
@@ -61,103 +65,6 @@ std::tuple<double, int> gain_on_feature(const int nr_leaves, unsigned long N, in
     return std::make_tuple(best_gain, best_idx);
 }
 
-template<unsigned short d>
-dt<d> create_dt(const float* features, std::vector<std::vector<int>>& sorted_features,
-                std::vector<std::vector<int>>& runs,
-                unsigned short n_feat, const std::vector<float>& response){
-    int N = sorted_features[0].size(), best_feature=0;
-    int *L;
-    int nr_leaves=1;
-    float best_gain=0, g=0;
-    float best_c=0;
-    std::vector<int>count;
-    std::vector<float> summer;
-    std::vector<int>::iterator best_point;
-
-    L=(int*)malloc(N*sizeof(int));
-    for(int i=0; i<N; ++i) L[i] = 1;
-
-    dt<d> result_dt;
-    int act=0;
-
-    // loop on all levels of the tree
-    for(unsigned short t=0; t<d; ++t) {
-        nr_leaves <<= 1; // number of leaves = 2^t
-        best_gain=0, best_feature=-1;
-
-        // loop on features
-        for(int j=0; j<n_feat; ++j){
-            count = std::vector<int>(nr_leaves, 0);
-            summer = std::vector<float>(nr_leaves, 0);
-
-            for (int m = 0; m < N; ++m) {
-                count[L[m]] += 1;
-                summer[L[m]] += response[m];
-            }
-
-            // loop on nr of values of that feature
-            auto doc_id = sorted_features[j].begin();
-            for(auto r=runs[j].begin(); r!=runs[j].end(); ++r){
-                act=0;
-                // update count and summer
-                // by changing position of docs having that value on feature j
-                while(act!=*r){
-                    count[L[*doc_id]] -= 1;
-                    summer[L[*doc_id]] -= response[*doc_id];
-                    count[L[*doc_id]-1] += 1;
-                    summer[L[*doc_id]-1] += response[*doc_id];
-                    ++doc_id;
-                    ++act;
-                }
-                // calculate gain for that combination of (x_j, c)
-                g = 0;
-                for(int k=0; k<nr_leaves; ++k) {
-                    if (count[k] != 0) {
-                        g += (summer[k]*summer[k])/count[k];
-                    }
-                }
-                if( g > best_gain ){
-                    best_gain = g;
-                    best_feature = j;
-                    best_point = doc_id;
-                }
-
-            } // end loop on nr of values of that feature
-        } // end loop on feature
-
-        int mask = 0x00000001;
-        auto doc_id = sorted_features[best_feature].begin();
-        auto end = sorted_features[best_feature].end();
-        if(t < d-1) {
-            // update docs which have feature x_j <= c
-            while(doc_id!=best_point){
-                L[*doc_id] <<= 1;
-                L[*doc_id] |= mask;
-                ++doc_id;
-            }
-            while(doc_id!=end){
-                L[*doc_id] -= 1;
-                L[*doc_id] <<= 1;
-                L[*doc_id] |= mask;
-                ++doc_id;
-            }
-        }else{
-            while(best_point!=end){
-                L[*best_point] -= 1;
-                ++best_point;
-            }
-        }
-
-        // update level t of decision table
-        best_c = features[(best_feature*N) + *std::prev(best_point)];
-        result_dt.fill_level(L, response, N, best_feature, best_c, t);
-
-    }// end loop on level of tree
-    // result_dt.update_predictions(L, response, N);
-    return result_dt;
-}
-
-
 // Cyclic backfitting
 template<unsigned short d>
 dt<d> backfitting(dt<d>& dt, matrix& features, imatrix& sorted_features,
@@ -172,7 +79,7 @@ dt<d> backfitting(dt<d>& dt, matrix& features, imatrix& sorted_features,
             best_gain=0;
             for(int m=0; m<N; ++m) L[m] |= (1<<t);
             // loop on features
-            #pragma omp parallel
+            #pragma omp parallel if(go_parallel) shared(N,L,response,sorted_features,runs,t)
             {
                 #pragma omp for schedule(dynamic)
                 for(int j=0; j<n_feat; ++j){
@@ -206,7 +113,6 @@ dt<d> backfitting(dt<d>& dt, matrix& features, imatrix& sorted_features,
 }
 
 
-
 template<unsigned short d>
 dt<d> create_dt_2(matrix& features, imatrix& sorted_features,
                   imatrix& runs, const std::vector<float>& response){
@@ -229,7 +135,7 @@ dt<d> create_dt_2(matrix& features, imatrix& sorted_features,
         best_gain=0, best_idx=0, best_feature=-1;
 
         // loop on features
-        #pragma omp parallel
+        #pragma omp parallel if(go_parallel2)
         {
             #pragma omp for schedule(dynamic)
             for(int j=0; j<n_feat; ++j){
@@ -244,8 +150,6 @@ dt<d> create_dt_2(matrix& features, imatrix& sorted_features,
                 }
             } // end loop on feature
         };
-
-        if(t==2) std::cout << "best gain: " << best_gain << "\n";
 
         // int mask = 0x00000001;
         auto doc_id = sorted_features[best_feature].begin();
@@ -271,17 +175,12 @@ dt<d> create_dt_2(matrix& features, imatrix& sorted_features,
             }
         }
 
-        std::vector<int> count(N, 0);
-
         // update level t of decision table
         best_c = features[best_feature][sorted_features[best_feature][best_idx]];
         result_dt.fill_level(L, response, best_feature, best_c, t);
 
     }// end loop on level of tree
-    //result_dt.printer();
     backfitting(result_dt, features, sorted_features, runs, L, response, 2);
-    //result_dt.printer();
-    // result_dt.update_predictions(L, response, N);
     return result_dt;
 }
 

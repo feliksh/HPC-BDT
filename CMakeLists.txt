@@ -3,7 +3,7 @@ project(HPC-BDT)
 
 set(CMAKE_CXX_STANDARD 14)
 
-SET(CMAKE_CXX_FLAGS -pthread)
+SET(CMAKE_CXX_FLAGS "-fopenmp -pthread")
 
 set(SOURCE_FILES
         main.cc structs.h utility.h bdt.h)

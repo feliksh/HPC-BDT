@@ -5,9 +5,12 @@
 #include <algorithm>
 #include <cmath>
 #include <numeric>
+#include <omp.h>
 
 #include "structs.h"
 #include "bdt.h"
+
+#define parallel_sort false
 
 /**
  *
@@ -66,27 +69,31 @@ std::vector<std::vector<float>> extract_data(const std::string *filename, std::v
 // TODO check bob correctness
 std::vector<std::vector<int>> sort_features(std::vector<std::vector<float>>& data,
                                             std::vector<std::vector<int>>& runs){
-    int count=0;
+
     std::vector<int> bob;
     std::vector<int> v(data[0].size());
     std::vector<std::vector<int>> result(data.size(), std::vector<int>());
-    for(short feat=0; feat<data.size(); ++feat){
-        count=0;
-        std::iota(v.begin(), v.end(), 0);
-        std::sort(v.begin(), v.end(), [&](int i, int j){ return data[feat][i]>data[feat][j]; });
-        result[feat].assign(v.begin(), v.end());
-        for(int i=0; i<data[0].size()-1; ++i){
-            if(data[feat][v[i]] == data[feat][v[i+1]])
-                ++count;
-            else {
-                bob.push_back(count+1);
-                count = 0;
+#pragma omp parallel if(parallel_sort) private(bob) firstprivate(v)
+    {
+#pragma for schedule(dynamic)
+        for (int feat = 0; feat < data.size(); ++feat) {
+            int count=0;
+            std::iota(v.begin(), v.end(), 0);
+            std::sort(v.begin(), v.end(), [&](int i, int j) { return data[feat][i] > data[feat][j]; });
+            result[feat].assign(v.begin(), v.end());
+            for (int i = 0; i < data[0].size() - 1; ++i) {
+                if (data[feat][v[i]] == data[feat][v[i + 1]])
+                    ++count;
+                else {
+                    bob.push_back(count + 1);
+                    count = 0;
+                }
             }
+            bob.push_back(count + 1);
+            runs[feat].assign(bob.begin(), bob.end());
+            bob.clear();
         }
-        bob.push_back(count+1);
-        runs[feat].assign(bob.begin(), bob.end());
-        bob.clear();
-    }
+    };
     return result;
 }
 
@@ -107,7 +114,7 @@ int main(int argc, char* argv[]){
 
     float* features = nullptr;
 
-    std::vector<std::vector<float>> data = extract_data(&file, &response, &N, &n_features, ';');
+    std::vector<std::vector<float>> data = extract_data(&news, &response, &N, &n_features, ',');
 
     int test_size = N/10*2;
     N = N-test_size;
@@ -127,18 +134,19 @@ int main(int argc, char* argv[]){
 
     // sort features
     std::vector<std::vector<int>> runs(n_features, std::vector<int>());
-    std::vector<std::vector<int>> sorted_feats = sort_features(transposed_features, runs);
 
     auto begin = std::chrono::high_resolution_clock::now();
+    std::vector<std::vector<int>> sorted_feats = sort_features(transposed_features, runs);
+
     // start learning step
     bdt_scoring<d> bdt;
     bdt = train<d>(training_set, sorted_feats, runs, train_gt, tables);
 
     auto end = std::chrono::high_resolution_clock::now();
-    auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds> (end - begin);
-
-    float rmse = test<d>(test_set, test_gt, bdt);
-
-    std::cout << "RMSE: " << rmse/test_size << "\n";
+    auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - begin);
     std::cout << "Time:\t" << elapsed.count() << "ms." << std::endl;
+
+    //float rmse = test<d>(test_set, test_gt, bdt);
+
+    //std::cout << "RMSE: " << rmse/test_size << "\n";
 }
