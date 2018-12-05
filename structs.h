@@ -13,7 +13,7 @@ struct dt{
     int features[d];
     float cuts[d];
     float predictions[1<<d]; //size 2^d
-    float *father_prediction;
+    float *father_prediction; // TODO: fixed size to avoid many allocations
 
     dt(){
         memset(features, 0, d*sizeof(unsigned int));
@@ -29,13 +29,21 @@ struct dt{
         update_predictions(L, response, level);
     }
 
-    void update_predictions(int L[], const std::vector<float>& response, short level){
+    void update_predictions(int L[], const std::vector<float>& response, int level){
         unsigned long N = response.size();
         int count[1<<(level+1)];
         memset(count, 0, (1<<(level+1))*sizeof(int));
-        for(int i=0; i<N; ++i){
-            predictions[L[i]>>1] += response[i];
-            ++count[L[i]>>1];
+        memset(predictions, 0, (1<<d)*sizeof(float));
+        if(level < d-1) {
+            for (int i = 0; i < N; ++i) {
+                predictions[L[i] >> 1] += response[i];
+                ++count[L[i] >> 1];
+            }
+        }else{
+            for (int i = 0; i < N; ++i) {
+                predictions[L[i]] += response[i];
+                ++count[L[i]];
+            }
         }
         for(int i=0; i<(1<<(level+1)); ++i) {
             if (count[i] > 0) {
@@ -54,16 +62,32 @@ struct dt{
 
     void printer(){
         for(int i=0; i<d; ++i) std::cout << features[i] << "\t-> " << cuts[i] << std::endl;
-        for(int i=0; i<(1<<d); ++i) std::cout << "(" << i << "):" << predictions[i] << " ";
+        for(int i=(1<<d)-1; i>=0; --i) std::cout << "(" << i << "):" << predictions[i] << " ";
         std::cout << std::endl;
     }
 
     float predict(const std::vector<float>& feature){
         int idx = 0;
         for(unsigned i=0; i<d; ++i){
-            if (feature[features[i]] <= cuts[i])
-                idx += (1<<i);
+            if (feature[features[i]] > cuts[i])
+                idx |= (1<<i);
         }
+        return predictions[idx];
+    }
+
+    float printpredict(const std::vector<float>& feature){
+        int idx = 0;
+        std::cout << "feature: ";
+        for(const float &f: feature)
+            std::cout << f << " ";
+        std::cout << "\n";
+        for(unsigned i=0; i<d; ++i){
+            if (feature[features[i]] > cuts[i]) {
+                idx |= (1 << i);
+                std::cout << "feature " << features[i] << " cut: " << cuts[i] << " orred " << (1<<i) << "\n";
+            }
+        }
+        std::cout << "predicted idx: " << idx << " value: " << predictions[idx] << "\n";
         return predictions[idx];
     }
 };
@@ -75,6 +99,7 @@ struct bdt_scoring{
 
     void add_dt(dt<d> new_dt){
         dts.push_back(new_dt);
+        // new_dt.printer();
     }
 
     float predict(const std::vector<float>& x){
@@ -83,6 +108,14 @@ struct bdt_scoring{
             prediction += (*it).predict(x);
         }
         return prediction;
+    }
+
+    void looper(const std::vector<float>& x){
+        for(typename std::vector<dt<d>>::iterator it = dts.begin(); it != dts.end(); ++it){
+            (*it).printer();
+            (*it).printpredict(x);
+            std::cout << "\n";
+        }
     }
 };
 

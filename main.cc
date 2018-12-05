@@ -44,13 +44,16 @@ std::vector<std::vector<float>> extract_data(const std::string *filename, std::v
             for (char &it : line) if (it == sep) ++(*n_features);
             i = 0;
         }
+        *n_features;
     }
 
     if(file.good()) {
         while (std::getline(file, line, sep)) {
             ++i;
-            if(i!=1) line_f.push_back(std::stof(line));
-            if (i == *n_features) {
+            if(i!=1)
+            if(i!=*n_features) line_f.push_back(std::stof(line));
+            else{
+                line_f.push_back(std::stof(line));
                 features.push_back(line_f);
                 line_f.clear();
                 std::getline(file, line, '\n');
@@ -102,21 +105,23 @@ std::vector<std::vector<int>> sort_features(std::vector<std::vector<float>>& dat
 int main(int argc, char* argv[]){
     // init chrono
     std::vector<float> response;
-    std::string parent = "/home/felix/Desktop/universita/master/high-performance-computing/HPC-BDT/";
+    std::string parent = "/home/felix/Desktop/universita/master/high-performance-computing/HPC-BDT/datasets/";
     std::string file = parent+"winequality-white.csv"; // sep=';'
     std::string file2 = parent+"cal_housing.data";
     std::string news = parent+"OnlineNewsPopularity.csv";
+    std::string toy = parent+"toy2.csv";
+    std::string gender = parent+"gender.csv";
+    std::string ai_example = parent+"ai.data";
     int N=0;
-    float sum=0;
     int n_features = 0;
-    unsigned short const d=4;
+    unsigned short const d=2;
     int const tables=1;
 
     float* features = nullptr;
 
-    std::vector<std::vector<float>> data = extract_data(&news, &response, &N, &n_features, ',');
+    std::vector<std::vector<float>> data = extract_data(&ai_example, &response, &N, &n_features, ',');
 
-    int test_size = N/10*2;
+    int test_size = N/10;
     N = N-test_size;
 
     std::vector<std::vector<float>> training_set =
@@ -127,8 +132,6 @@ int main(int argc, char* argv[]){
     std::vector<float> test_gt = std::vector<float>(response.begin()+N, response.end());
 
     // create a more memory compact structure and cache friendly (transposed)
-    // features = (float*)malloc(n_features*N*sizeof(float));
-    // transform(training_set, features, N, n_features);
     std::vector<std::vector<float>> transposed_features(n_features, std::vector<float>(N, 0));
     transpose(training_set, transposed_features);
 
@@ -144,9 +147,8 @@ int main(int argc, char* argv[]){
 
     auto end = std::chrono::high_resolution_clock::now();
     auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - begin);
+
+    float rmse = test<d>(test_set, test_gt, bdt);
+    std::cout << "RMSE: " << rmse << "\n";
     std::cout << "Time:\t" << elapsed.count() << "ms." << std::endl;
-
-    //float rmse = test<d>(test_set, test_gt, bdt);
-
-    //std::cout << "RMSE: " << rmse/test_size << "\n";
 }
