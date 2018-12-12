@@ -93,9 +93,13 @@ struct dt{
 };
 
 
-template<unsigned short d>
+template<unsigned short d, unsigned short t>
 struct bdt_scoring{
     std::vector<dt<d>> dts;
+
+    bdt_scoring(){
+        dts.reserve(t);
+    }
 
     void add_dt(dt<d> new_dt){
         dts.push_back(new_dt);

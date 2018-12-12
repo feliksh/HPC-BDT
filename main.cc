@@ -50,7 +50,6 @@ std::vector<std::vector<float>> extract_data(const std::string *filename, std::v
     if(file.good()) {
         while (std::getline(file, line, sep)) {
             ++i;
-            if(i!=1)
             if(i!=*n_features) line_f.push_back(std::stof(line));
             else{
                 line_f.push_back(std::stof(line));
@@ -115,7 +114,7 @@ int main(int argc, char* argv[]){
     int N=0;
     int n_features = 0;
     unsigned short const d=2;
-    int const tables=1;
+    int const tables=52;
 
     float* features = nullptr;
 
@@ -142,8 +141,8 @@ int main(int argc, char* argv[]){
     std::vector<std::vector<int>> sorted_feats = sort_features(transposed_features, runs);
 
     // start learning step
-    bdt_scoring<d> bdt;
-    bdt = train<d>(training_set, sorted_feats, runs, train_gt, tables);
+    bdt_scoring<d, tables> bdt;
+    bdt = train<d, tables>(training_set, sorted_feats, runs, train_gt);
 
     auto end = std::chrono::high_resolution_clock::now();
     auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - begin);
