@@ -5,6 +5,7 @@
 
 #include <cstring>
 #include <sys/param.h>
+#define shrink 0.05
 
 
 template <unsigned short d>
@@ -13,26 +14,28 @@ struct dt{
     int features[d];
     float cuts[d];
     float predictions[1<<d]; //size 2^d
-    float *father_prediction; // TODO: fixed size to avoid many allocations
+    float father_prediction[1<<(d-1)]; // TODO: fixed size to avoid many allocations
 
     dt(){
         memset(features, 0, d*sizeof(unsigned int));
         memset(cuts, 0, d*sizeof(float));
         memset(predictions, 0, (1<<d)*sizeof(float));
-        father_prediction = (float*)malloc(sizeof(float));
-        memset(father_prediction, 0, sizeof(float));
+        memset(father_prediction, 0, (1<<(d-1))*sizeof(float));
     }
 
     void fill_level(int L[], const std::vector<float>& response, int feat, float cut, short level){
         features[level] = feat;
         cuts[level] = cut;
+        // TODO why updating if not last level? because of father
         update_predictions(L, response, level);
     }
 
     void update_predictions(int L[], const std::vector<float>& response, int level){
         unsigned long N = response.size();
         int count[1<<(level+1)];
+        float sd[1<<(level+1)];
         memset(count, 0, (1<<(level+1))*sizeof(int));
+        memset(sd, 0, (1<<(level+1))*sizeof(float));
         memset(predictions, 0, (1<<d)*sizeof(float));
         if(level < d-1) {
             for (int i = 0; i < N; ++i) {
@@ -44,6 +47,12 @@ struct dt{
                 predictions[L[i]] += response[i];
                 ++count[L[i]];
             }
+            if(false) {
+                std::cout << "\nCount: ";
+                for (int i = 0; i < (1 << (level + 1)); ++i)
+                    std::cout << count[i] << " ";
+                std::cout << std::endl;
+            }
         }
         for(int i=0; i<(1<<(level+1)); ++i) {
             if (count[i] > 0) {
@@ -51,11 +60,31 @@ struct dt{
             }else{
                 // take fathers prediction
                 predictions[i] = father_prediction[i>>1];
+                // take brother/sister prediction
+                //if(i-1 >= 0) predictions[i] = predictions[i-1];
+                //else predictions[i] = predictions[i+1];
             }
         }
-        delete[] father_prediction;
-        father_prediction = (float*)malloc((1<<(level+1))*sizeof(float));
+
+        // debugging:
+        if(level == d-1 && false) {
+            for (int i = 0; i < N; ++i) {
+                sd[L[i]] += std::pow(response[L[i]] - predictions[L[i]], 2);
+            }
+            for (int i = 0; i < (1 << (level + 1)); ++i)
+                sd[i] /= count[i] - 1;
+            std::cout << "Predictions: ";
+            for (int i = 0; i < (1 << (level + 1)); ++i)
+                std::cout << predictions[i] << " ";
+            std::cout << std::endl;
+            std::cout << "---------SD: ";
+            for (int i = 0; i < (1 << (level + 1)); ++i)
+                std::cout << std::sqrt(sd[i]) << " ";
+            std::cout << std::endl;
+        }
+        // TODO check father and so
         for(int i=0; i<(1<<(level+1)); ++i)
+            //father_prediction[i] = 0;
             father_prediction[i] = predictions[i];
     }
 
@@ -69,7 +98,7 @@ struct dt{
     float predict(const std::vector<float>& feature){
         int idx = 0;
         for(unsigned i=0; i<d; ++i){
-            if (feature[features[i]] > cuts[i])
+            if (feature[features[i]] <= cuts[i])
                 idx |= (1<<i);
         }
         return predictions[idx];
@@ -82,7 +111,7 @@ struct dt{
             std::cout << f << " ";
         std::cout << "\n";
         for(unsigned i=0; i<d; ++i){
-            if (feature[features[i]] > cuts[i]) {
+            if (feature[features[i]] <= cuts[i]) {
                 idx |= (1 << i);
                 std::cout << "feature " << features[i] << " cut: " << cuts[i] << " orred " << (1<<i) << "\n";
             }
@@ -109,7 +138,7 @@ struct bdt_scoring{
     float predict(const std::vector<float>& x){
         float prediction=0;
         for(typename std::vector<dt<d>>::iterator it = dts.begin(); it != dts.end(); ++it){
-            prediction += (*it).predict(x);
+            prediction += shrink*(*it).predict(x);
         }
         return prediction;
     }
