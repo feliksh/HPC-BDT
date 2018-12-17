@@ -6,11 +6,13 @@
 #include <cmath>
 #include <numeric>
 #include <omp.h>
+#include <random>
 
 #include "structs.h"
 #include "bdt.h"
 
-#define parallel_sort false
+#define chrono_now std::chrono::high_resolution_clock::now()
+#define chrono_diff(b,e) std::chrono::duration_cast<std::chrono::milliseconds>(e-b)
 
 /**
  *
@@ -27,7 +29,7 @@ void transform(std::vector<std::vector<float>>& data, float* result, int N, int 
 
 
 std::vector<std::vector<float>> extract_data(const std::string *filename, std::vector<float> *response,
-                                             int* N, int* n_features, char sep){
+                                             int* N, unsigned long* n_features, char sep){
     std::vector<std::vector<float>> features;
     std::vector<float> line_f;
     int i=-1;
@@ -44,7 +46,6 @@ std::vector<std::vector<float>> extract_data(const std::string *filename, std::v
             for (char &it : line) if (it == sep) ++(*n_features);
             i = 0;
         }
-        *n_features;
     }
 
     if(file.good()) {
@@ -68,76 +69,37 @@ std::vector<std::vector<float>> extract_data(const std::string *filename, std::v
 }
 
 
-// TODO check bob correctness
-std::vector<std::vector<int>> sort_features(std::vector<std::vector<float>>& data,
-                                            std::vector<std::vector<int>>& runs){
-
-    std::vector<int> bob;
-    std::vector<int> v(data[0].size());
-    std::vector<std::vector<int>> result(data.size(), std::vector<int>());
-#pragma omp parallel if(parallel_sort) private(bob) firstprivate(v)
-    {
-#pragma for schedule(dynamic)
-        for (int feat = 0; feat < data.size(); ++feat) {
-            int count=0;
-            std::iota(v.begin(), v.end(), 0);
-            std::sort(v.begin(), v.end(), [&](int i, int j) { return data[feat][i] > data[feat][j]; });
-            result[feat].assign(v.begin(), v.end());
-            for (int i = 0; i < data[0].size() - 1; ++i) {
-                if (data[feat][v[i]] == data[feat][v[i + 1]])
-                    ++count;
-                else {
-                    bob.push_back(count + 1);
-                    count = 0;
-                }
-            }
-            bob.push_back(count + 1);
-            runs[feat].assign(bob.begin(), bob.end());
-            bob.clear();
-        }
-    };
-    return result;
-}
-
-
 
 int main(int argc, char* argv[]){
     // init chrono
-    std::vector<float> gt;
     std::string parent = "/home/felix/Desktop/universita/master/high-performance-computing/HPC-BDT/datasets/";
     std::string file = parent+"winequality-white.csv"; // sep=';'
     std::string file2 = parent+"cal_housing.data"; // too big values of response
-    std::string news = parent+"OnlineNewsPopularity.csv";
+    //std::string news = parent+"OnlineNewsPopularity.csv";
+    std::string news = parent+"NewsModified.csv";
     std::string toy = parent+"toy2.csv";
     std::string gender = parent+"gender.csv";
     std::string ai_example = parent+"ai.data";
     int N=0;
-    int n_features = 0;
+    unsigned long n_features = 0;
     unsigned short const d=4;
-    int const tables=5;
+    int const tables=200;
 
-    float* features = nullptr;
+    std::vector<float> gt;
 
     std::vector<std::vector<float>> data = extract_data(&file2, &gt, &N, &n_features, ',');
 
-    // TODO test what happens with greater range
-    // scale response in range 0-1
-    float min=FLT_MAX, max=-min;
-    for(int i=0; i<N; ++i) {
-        if (gt[i] < min) min = gt[i];
-        if (gt[i] > max) max = gt[i];
-    }
-    for(int i=0; i<N; ++i) gt[i] = (gt[i]-min)/(max-min);
+    // take a random permutation of data
+    shuffle_data(data, gt);
 
     int test_size = N/10;
-    //N = N-test_size;
+    N = N-test_size;
 
-    std::vector<std::vector<float>> training_set =
-            std::vector<std::vector<float>>(data.begin(), data.begin()+N);
-    std::vector<std::vector<float>> test_set =
-            std::vector<std::vector<float>>(data.begin()+N, data.end());
-    std::vector<float> train_gt = std::vector<float>(gt.begin(), gt.begin()+N);
-    std::vector<float> test_gt = std::vector<float>(gt.begin()+N, gt.end());
+    std::vector<std::vector<float>> training_set(data.begin(), data.begin()+N);
+    std::vector<std::vector<float>> test_set(data.begin()+N, data.end());
+
+    std::vector<float> train_gt(gt.begin(), gt.begin()+N);
+    std::vector<float> test_gt(gt.begin()+N, gt.end());
 
     // create a more memory compact structure and cache friendly (transposed)
     std::vector<std::vector<float>> transposed_features(n_features, std::vector<float>(N, 0));
@@ -145,18 +107,30 @@ int main(int argc, char* argv[]){
 
     // sort features
     std::vector<std::vector<int>> runs(n_features, std::vector<int>());
-
-    auto begin = std::chrono::high_resolution_clock::now();
-    std::vector<std::vector<int>> sorted_feats = sort_features(transposed_features, runs);
+    std::vector<std::vector<int>> sorted_feats(n_features, std::vector<int>());
+    auto sort_begin = std::chrono::high_resolution_clock::now();
+    sort_features(transposed_features, runs, sorted_feats);
+    auto sort_end = std::chrono::high_resolution_clock::now();
+    auto sort_elapsed = chrono_diff(sort_begin, sort_end);
 
     // start learning step
-    bdt_scoring<d, tables> bdt;
-    bdt = train<d, tables>(training_set, sorted_feats, runs, train_gt);
+    auto train_begin = chrono_now;
+    bdt_scoring<d, tables> *bdt = train<d, tables>(training_set, transposed_features, sorted_feats, runs, train_gt);
+    auto train_end = chrono_now;
+    auto train_elapsed = chrono_diff(train_begin, train_end);
 
-    auto end = std::chrono::high_resolution_clock::now();
-    auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - begin);
+    // start testing step
+    auto test_begin = chrono_now;
+    double rmse = test<d,tables>(test_set, test_gt, bdt);
+    auto test_end = chrono_now;
+    auto test_elapsed = chrono_diff(test_begin, test_end);
 
-    //float rmse = test<d>(test_set, test_gt, bdt);
-    //std::cout << "RMSE: " << rmse << "\n";
-    std::cout << "Time:\t" << elapsed.count() << "ms." << std::endl;
+    //std::cout << "Shot: " << rmse << "/" << test_size << " (" << rmse/test_size << ")\n";
+    std::cout << "RMSE: " << rmse << "\n";
+    std::cout << "Time sort:\t" << sort_elapsed.count() << "ms." << std::endl;
+    std::cout << "Time train:\t" << train_elapsed.count() << "ms." << std::endl;
+    std::cout << "Time test:\t" << test_elapsed.count() << "ms." << std::endl;
+
+    delete bdt;
+
 }

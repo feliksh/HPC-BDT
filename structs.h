@@ -23,35 +23,30 @@ struct dt{
         memset(father_prediction, 0, (1<<(d-1))*sizeof(float));
     }
 
-    void fill_level(int L[], const std::vector<float>& response, int feat, float cut, short level){
+    ~dt() = default;
+
+    void fill_level(std::vector<int> &L, std::vector<float> &response, int feat, float cut, short level){
         features[level] = feat;
         cuts[level] = cut;
         // TODO why updating if not last level? because of father
         update_predictions(L, response, level);
     }
 
-    void update_predictions(int L[], const std::vector<float>& response, int level){
+    void update_predictions(std::vector<int> &L, std::vector<float> &response, int level){
         unsigned long N = response.size();
         int count[1<<(level+1)];
-        float sd[1<<(level+1)];
         memset(count, 0, (1<<(level+1))*sizeof(int));
-        memset(sd, 0, (1<<(level+1))*sizeof(float));
         memset(predictions, 0, (1<<d)*sizeof(float));
         if(level < d-1) {
             for (int i = 0; i < N; ++i) {
                 predictions[L[i] >> 1] += response[i];
                 ++count[L[i] >> 1];
             }
+            for(int i=0; i<(1<<(level+1)); ++i) father_prediction[i] = predictions[i];
         }else{
             for (int i = 0; i < N; ++i) {
                 predictions[L[i]] += response[i];
                 ++count[L[i]];
-            }
-            if(false) {
-                std::cout << "\nCount: ";
-                for (int i = 0; i < (1 << (level + 1)); ++i)
-                    std::cout << count[i] << " ";
-                std::cout << std::endl;
             }
         }
         for(int i=0; i<(1<<(level+1)); ++i) {
@@ -60,32 +55,8 @@ struct dt{
             }else{
                 // take fathers prediction
                 predictions[i] = father_prediction[i>>1];
-                // take brother/sister prediction
-                //if(i-1 >= 0) predictions[i] = predictions[i-1];
-                //else predictions[i] = predictions[i+1];
             }
         }
-
-        // debugging:
-        if(level == d-1 && false) {
-            for (int i = 0; i < N; ++i) {
-                sd[L[i]] += std::pow(response[L[i]] - predictions[L[i]], 2);
-            }
-            for (int i = 0; i < (1 << (level + 1)); ++i)
-                sd[i] /= count[i] - 1;
-            std::cout << "Predictions: ";
-            for (int i = 0; i < (1 << (level + 1)); ++i)
-                std::cout << predictions[i] << " ";
-            std::cout << std::endl;
-            std::cout << "---------SD: ";
-            for (int i = 0; i < (1 << (level + 1)); ++i)
-                std::cout << std::sqrt(sd[i]) << " ";
-            std::cout << std::endl;
-        }
-        // TODO check father and so
-        for(int i=0; i<(1<<(level+1)); ++i)
-            //father_prediction[i] = 0;
-            father_prediction[i] = predictions[i];
     }
 
 
@@ -125,26 +96,37 @@ struct dt{
 template<unsigned short d, unsigned short t>
 struct bdt_scoring{
     std::vector<dt<d>> dts;
+    int pos;
 
     bdt_scoring(){
+        pos=0;
         dts.reserve(t);
     }
 
+    ~bdt_scoring() = default;
+
     void add_dt(dt<d> new_dt){
         dts.push_back(new_dt);
+        ++pos;
+        //dts.push_back(*new_dt);
         // new_dt.printer();
     }
 
     float predict(const std::vector<float>& x){
+        auto beg = dts.begin();
+        auto end = dts.end();
+        //float prediction=(*beg).predict(x);
+        //if(beg==end) return prediction;
         float prediction=0;
-        for(typename std::vector<dt<d>>::iterator it = dts.begin(); it != dts.end(); ++it){
+
+        for(typename std::vector<dt<d>>::iterator it = beg; it != end; ++it){
             prediction += shrink*(*it).predict(x);
         }
         return prediction;
     }
 
     void looper(const std::vector<float>& x){
-        for(typename std::vector<dt<d>>::iterator it = dts.begin(); it != dts.end(); ++it){
+        for(typename std::vector<dt<d>>::iterator it = (*dts).begin(); it != (*dts).end(); ++it){
             (*it).printer();
             (*it).printpredict(x);
             std::cout << "\n";

@@ -13,29 +13,25 @@
 #include "structs.h"
 #include "utility.h"
 
-#define go_parallel false
-#define go_parallel2 false
-#define veh false
-
 typedef std::vector<std::vector<float>> matrix;
 typedef std::vector<std::vector<int>> imatrix;
 
 /**
  * static
  * const
- *
+ * moved things in heap instead of stack, because of memory (problems)
  */
 
 // returns (gain, c) on that feature
 // shift=1 when creating decision table, shift>1 when backfitting
-std::tuple<long double, int> gain_on_feature(const int nr_leaves, const unsigned long N, const int *L,
-                                        const std::vector<float>& response,
+std::tuple<long double, int> gain_on_feature(const int nr_leaves, const unsigned long N, const std::vector<int>& L,
+                                        std::vector<float>& response,
                                         const std::vector<int>& sorted_feature,
                                         const std::vector<int>& run, const int shift) {
     int act, idx, best_idx=0; //TODO probably shift should be +1
     long double g=0, best_gain=-LDBL_MAX;
-    std::vector<int>count = std::vector<int>(nr_leaves, 0);
-    std::vector<double>summer = std::vector<double>(nr_leaves, 0);
+    std::vector<int> count(nr_leaves, 0);
+    std::vector<double> summer(nr_leaves, 0);
 
     for (int m = 0; m < N; ++m) {
         count[L[m]] += 1;
@@ -62,28 +58,26 @@ std::tuple<long double, int> gain_on_feature(const int nr_leaves, const unsigned
         // calculate gain for that combination of (x_j, c)
         g = 0;
         for(int k=0; k<nr_leaves; k=k+2){
-            g += std::pow(summer[k], 2) / count[k];
-            g += std::pow(summer[k+1], 2) / count[k+1];
+            if(count[k]>0)   g += std::pow(summer[k], 2) / count[k];
+            if(count[k+1]>0) g += std::pow(summer[k+1], 2) / count[k+1];
         }
-        /**for(int k=0; k<nr_leaves; ++k) {
-            if (count[k] != 0) {
-                g += summer[k]/count[k]*summer[k];
-            }
-        }**/
 
         if( g > best_gain ){
             best_gain = g;
             best_idx = idx;
         }
     } // end loop on nr of values of that feature
+
+    std::vector<int>().swap(count);
+    std::vector<double>().swap(summer);
     return std::make_tuple(best_gain, best_idx);
 }
 
 // TODO check static-ness
 // Cyclic backfitting
 template<unsigned short d>
-dt<d> backfitting(dt<d>& dt, const matrix& features, const imatrix& sorted_features,
-                  const imatrix& runs, int *L, const std::vector<float>& response, const int passes){
+void backfitting(dt<d>* dt, const matrix& features, const imatrix& sorted_features,
+                  const imatrix& runs, std::vector<int>& L, std::vector<float> &response, const int passes){
     unsigned long N = sorted_features[0].size();
     unsigned long n_feat = sorted_features.size();
     long double best_gain=-LDBL_MAX;
@@ -95,53 +89,51 @@ dt<d> backfitting(dt<d>& dt, const matrix& features, const imatrix& sorted_featu
             // remove the cut
             for(int m=0; m<N; ++m) L[m] |= (1<<(d-t-1));
             // loop on features
-            //#pragma omp parallel if(go_parallel) shared(N,L,response,sorted_features,runs,t){
-                //#pragma omp for schedule(dynamic)
-            for(int j=0; j<n_feat; ++j){
-                // loop on nr of values of that feature
-                // returns a tuple with (gain, idx on sorted feature j)
-                // TODO: check gain on t
-                std::tuple<long double, int> gc = gain_on_feature(1<<d, N, L, response,
-                                                            sorted_features[j], runs[j], 1<<(d-t-1));
-                // TODO: critical section?
-                if(std::get<0>(gc) > best_gain){
-                    best_gain = std::get<0>(gc);
-                    best_idx = std::get<1>(gc);
-                    best_feature = j;
-                }
-            } // end loop on feature
-            //};
+            #pragma omp parallel if(par_backfitting) shared(N,L,response,sorted_features,runs,t)
+            {
+                #pragma omp for schedule(dynamic)
+                for(int j=0; j<n_feat; ++j){
+                    // loop on nr of values of that feature
+                    // returns a tuple with (gain, idx on sorted feature j)
+                    // TODO: check gain on t
+                    std::tuple<long double, int> gc =
+                            gain_on_feature(1<<d, N, L, response, sorted_features[j], runs[j], 1<<(d-t-1));
+                    // TODO: critical section?
+                    if(std::get<0>(gc) > best_gain){
+                        best_gain = std::get<0>(gc);
+                        best_idx = std::get<1>(gc);
+                        best_feature = j;
+                    }
+                } // end loop on feature
+            };
             auto doc_id = sorted_features[best_feature].begin();
             //auto end = sorted_features[best_feature].end();
             auto best_point = doc_id+best_idx;
-            // update docs which have feature x_j <= c
+            // update docs which have feature x_j > c
             while(doc_id!=best_point){
                 L[*doc_id] -= (1<<(d-t-1));
                 ++doc_id;
             }
-            // TODO getting the wrong one, should use sorted_features; done
             float best_c = features[best_feature][*best_point];
-            dt.features[t] = best_feature;
-            dt.cuts[t] = best_c;
+            (*dt).features[t] = best_feature;
+            (*dt).cuts[t] = best_c;
         }
     }
-    dt.update_predictions(L, response, d-1);
-    return dt;
+    (*dt).update_predictions(L, response, d-1);
 }
 
 
 template<unsigned short d>
-dt<d> create_dt(matrix &features, imatrix &sorted_features,
-                imatrix &runs, const std::vector<float>& response){
+dt<d> create_dt(matrix& features, imatrix& sorted_features,
+                imatrix& runs, std::vector<float>& response){
     unsigned long N = sorted_features[0].size();
-    unsigned long n_feat = sorted_features.size();
-    int *L, best_feature=0;
+    unsigned int n_feat = sorted_features.size();
+    int best_feature=0;
     int nr_leaves=1, best_idx;
     long double best_gain;
     float best_c=0;
 
-    L=(int*)malloc(N*sizeof(int));
-    for(int i=0; i<N; ++i) L[i] = 1;
+    std::vector<int> L(N, 1);
 
     dt<d> result_dt;
 
@@ -151,20 +143,22 @@ dt<d> create_dt(matrix &features, imatrix &sorted_features,
         best_gain=-LDBL_MAX, best_idx=0, best_feature=-1;
 
         // loop on features
-        //#pragma omp parallel if(go_parallel2){
-            //#pragma omp for schedule(dynamic)
-        for(int j=0; j<n_feat; ++j){
-            // loop on nr of values of that feature
-            // returns a tuple with (gain, idx on sorted feature j)
-            std::tuple<long double, int> gc = gain_on_feature(nr_leaves, N, L,
-                                                         response, sorted_features[j], runs[j], 1);
-            if(std::get<0>(gc) > best_gain){
-                best_gain = std::get<0>(gc);
-                best_idx = std::get<1>(gc);
-                best_feature = j;
-            }
-        } // end loop on feature
-        //};
+        #pragma omp parallel if(par_dt)
+        {
+            #pragma omp for schedule(dynamic)
+            for(int j=0; j<n_feat; ++j){
+                // loop on nr of values of that feature
+                // returns a tuple with (gain, idx on sorted feature j)
+                std::tuple<long double, int> gc =
+                        gain_on_feature(nr_leaves, N, L, response, sorted_features[j], runs[j], 1);
+                // TODO critical section or selection of best gain
+                if(std::get<0>(gc) > best_gain){
+                    best_gain = std::get<0>(gc);
+                    best_idx = std::get<1>(gc);
+                    best_feature = j;
+                }
+            } // end loop on feature
+        };
 
         // int mask = 0x00000001;
         auto doc_id = sorted_features[best_feature].begin();
@@ -191,112 +185,84 @@ dt<d> create_dt(matrix &features, imatrix &sorted_features,
             }
         }
 
+
+
         // update level t of decision table
         // best_c = features[best_feature][sorted_features[best_feature][best_idx]];
         best_c = features[best_feature][*best_point];
         result_dt.fill_level(L, response, best_feature, best_c, t);
 
     }// end loop on level of tree
-    backfitting(result_dt, features, sorted_features, runs, L, response, 1);
-    free(L);
+    //result_dt.printer();
+    backfitting(&result_dt, features, sorted_features, runs, L, response, 1);
     return result_dt;
 }
 
 
 
 template<unsigned d, unsigned short t>
-bdt_scoring<d, t> train(matrix& training_set, imatrix& sorted_feats,
-                     imatrix& runs, const std::vector<float>& response){
+bdt_scoring<d, t>* train(matrix& training_set, matrix& transposed_features, imatrix& sorted_feats,
+                     imatrix& runs, std::vector<float>& response){
     unsigned long N = training_set.size();
-    unsigned long n_features = training_set[0].size();
-    bdt_scoring<d, t> bdt_table;
+    bdt_scoring<d, t> *bdt_table;
+    bdt_table = new bdt_scoring<d,t>();
     std::vector<float> residuals(N, 0);
-    std::vector<float> predictions(N, 0);
-    float rmse=0;
+    //float rmse=0;
 
     // TODO remove this transpose, already done in main
-    std::vector<std::vector<float>> transposed_features(n_features, std::vector<float>(N, 0));
-    transpose(training_set, transposed_features);
+    //std::vector<std::vector<float>> transposed_features(n_features, std::vector<float>(N, 0));
+    //transpose(training_set, transposed_features);
 
     // TODO: add criterion to stop nr of tables
-    /**
     dt<d> initial_dt = create_dt<d>(transposed_features, sorted_feats, runs, response);
-    bdt_table.add_dt(initial_dt);
-
-    for(int tab=1; tab<tables; ++tab){
-        for(int e=0; e<N; ++e) residuals[e] = response[e] - bdt_table.predict(training_set[e]);
-        dt<d> decision_tab = create_dt<d>(transposed_features, sorted_feats, runs, residuals);
-        bdt_table.add_dt(decision_tab);
-    }
-     **/
-
-    dt<d> initial_dt = create_dt<d>(transposed_features, sorted_feats, runs, response);
-    bdt_table.add_dt(initial_dt);
-    if(veh){
-        std::cout << "\n\nTab at lv 0:\n";
-        initial_dt.printer();
-        std::cout << "Residuals at lv 0:\n";
-    }
+    bdt_table->add_dt(initial_dt);
     for(int e=0; e<N; ++e){
-        if(e<10 && veh){
-            std::cout << "Prediction: " << initial_dt.predict(training_set[e])
-                      << "; response: " << response[e]
-                      << "; diff: " << response[e]-initial_dt.predict(training_set[e]) << "\n";
-        }
-        residuals[e] = response[e] - shrink*(initial_dt.predict(training_set[e]));
-        rmse += std::pow(initial_dt.predict(training_set[e])-response[e], 2);
+        residuals[e] = response[e]-initial_dt.predict(training_set[e]);
+        //rmse += std::pow(initial_dt.predict(training_set[e])-response[e], 2);
     }
-    //initial_dt.printpredict(training_set[0]); std::cout << " gt: " << response[0] << "\n";
-    //std::cout << "\n";
-    rmse /= N;
-    std::cout << "RMSE at lv 0: " << rmse << std::endl;
+
+    //rmse /= N;
+    //rmse = std::sqrt(rmse);
+    //std::cout << "RMSE at lv 0: " << rmse << std::endl;
+    //initial_dt.printer();
+
     for(int tab=1; tab<t; ++tab){
         dt<d> decision_tab = create_dt<d>(transposed_features, sorted_feats, runs, residuals);
-        bdt_table.add_dt(decision_tab);
-        if(veh) {
-            std::cout << "Tab at lv " << tab << ":\n";
-            decision_tab.printer();
-            std::cout << "Residuals at lv " << tab << ":\n";
-        }
-        rmse=0;
+        bdt_table->add_dt(decision_tab);
+        //rmse=0;
         for(int e=0; e<N; ++e) {
-            if(e<10 && veh) {
-                std::cout << "Prediction: " << decision_tab.predict(training_set[e])
-                          << "; residual: " << residuals[e]
-                          << "; diff: " << residuals[e] - decision_tab.predict(training_set[e]) << "\n";
-            }
-            float nrm = bdt_table.predict(training_set[e]);
-            nrm -= response[e];
-            rmse += std::pow(nrm, 2);
-            residuals[e] = response[e] - shrink*(decision_tab.predict(training_set[e]));
+            float nrm = bdt_table->predict(training_set[e]);
+            //rmse += std::pow(nrm-response[e], 2);
+            residuals[e] = response[e] - bdt_table->predict(training_set[e]);
+            //residuals[e] = response[e] - bdt_table->predict(training_set[e]);
         }
-        if(veh){std::cout << "\n";}
-        rmse /= N;
-        std::cout << "RMSE at lv " << tab << ": " << rmse << std::endl;
+        //rmse /= N;
+        //rmse = std::sqrt(rmse);
+        //std::cout << "RMSE at lv " << tab << ": " << rmse << std::endl;
     }
-    // bdt_table.looper(training_set[0]);
 
     return bdt_table;
 }
 
 template<unsigned d, unsigned short t>
-double test(matrix& test_set, std::vector<float>& ground_truth, bdt_scoring<d,t>& bdt_table){
+double test(matrix &test_set, std::vector<float> &ground_truth, bdt_scoring<d,t> *bdt_table){
     unsigned long test_size = test_set.size();
     double rmse = 0;
-    int correct=0;
+    //int correct=0;
 
-    std::cout << "\n\nTESTING:\n";
+    //std::cout << "\n\nTESTING:\n";
     for(int i=0; i<test_size; ++i) {
         //if(i==0) bdt_table.looper(test_set[i]);
         //if(i==0) std::cout << "PREDICTION: " << ground_truth[0] << ", GT: " << ground_truth[0] << "\n";
-        float resp = bdt_table.predict(test_set[i]);
+        float resp = bdt_table->predict(test_set[i]);
         rmse += std::pow(resp-ground_truth[i], 2);
-        if(std::abs(resp-ground_truth[i]) < ground_truth[i]*0.2) ++correct;
-        //std::cout << "Pred: " << resp << " Gt: " << ground_truth[i]  << "\tDiff: " << std::abs(resp-ground_truth[i]) << "\n";
+        //if(std::abs(resp-ground_truth[i]) < ground_truth[i]*0.2) ++correct;
+        //if(i % 197 == 0) std::cout << "Pred: " << resp
+        //<< "\tGt: " << ground_truth[i]
+        //<< "\tDiff: " << std::abs(resp-ground_truth[i]) << "\n";
     }
-    rmse /= 2*test_size;
-
-    std::cout << "Guessed: " << correct << "/" << test_size << " (" << (float)correct/(float)test_size << ")\n";
-    return rmse;
+    rmse /= test_size;
+    //std::cout << "Guessed: " << correct << "/" << test_size << " (" << (float)correct/(float)test_size << ")\n";
+    return std::sqrt(rmse);
 }
 #endif //HPC_BDT_BDT_H
