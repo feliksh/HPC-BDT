@@ -76,7 +76,7 @@ std::tuple<long double, int> gain_on_feature(const int nr_leaves, const unsigned
 // TODO check static-ness
 // Cyclic backfitting
 template<unsigned short d>
-void backfitting(dt<d>* dt, const matrix& features, const imatrix& sorted_features,
+void backfitting_sse(dt<d>* dt, const matrix& features, const imatrix& sorted_features,
                   const imatrix& runs, std::vector<int>& L, std::vector<float> &response, const int passes){
     unsigned long N = sorted_features[0].size();
     unsigned long n_feat = sorted_features.size();
@@ -185,8 +185,6 @@ dt<d> create_dt(matrix& features, imatrix& sorted_features,
             }
         }
 
-
-
         // update level t of decision table
         // best_c = features[best_feature][sorted_features[best_feature][best_idx]];
         best_c = features[best_feature][*best_point];
@@ -194,10 +192,9 @@ dt<d> create_dt(matrix& features, imatrix& sorted_features,
 
     }// end loop on level of tree
     //result_dt.printer();
-    backfitting(&result_dt, features, sorted_features, runs, L, response, 1);
+    backfitting_sse(&result_dt, features, sorted_features, runs, L, response, 1);
     return result_dt;
 }
-
 
 
 template<unsigned d, unsigned short t>
@@ -214,7 +211,10 @@ bdt_scoring<d, t>* train(matrix& training_set, matrix& transposed_features, imat
     //transpose(training_set, transposed_features);
 
     // TODO: add criterion to stop nr of tables
+    auto dt_begin = chrono_now;
     dt<d> initial_dt = create_dt<d>(transposed_features, sorted_feats, runs, response);
+    auto dt_end = chrono_now;
+    auto dt_elapsed = chrono_diff(dt_begin, dt_end);
     bdt_table->add_dt(initial_dt);
     for(int e=0; e<N; ++e){
         residuals[e] = response[e]-initial_dt.predict(training_set[e]);
@@ -241,11 +241,13 @@ bdt_scoring<d, t>* train(matrix& training_set, matrix& transposed_features, imat
         //std::cout << "RMSE at lv " << tab << ": " << rmse << std::endl;
     }
 
+    // std::cout << "Time dt: " << dt_elapsed.count() << "ms.\n";
     return bdt_table;
 }
 
 template<unsigned d, unsigned short t>
-double test(matrix &test_set, std::vector<float> &ground_truth, bdt_scoring<d,t> *bdt_table){
+double test(matrix &test_set, std::vector<float> &ground_truth, bdt_scoring<d,t> *bdt_table,
+        float gt_mean, float gt_std){
     unsigned long test_size = test_set.size();
     double rmse = 0;
     //int correct=0;
@@ -255,7 +257,8 @@ double test(matrix &test_set, std::vector<float> &ground_truth, bdt_scoring<d,t>
         //if(i==0) bdt_table.looper(test_set[i]);
         //if(i==0) std::cout << "PREDICTION: " << ground_truth[0] << ", GT: " << ground_truth[0] << "\n";
         float resp = bdt_table->predict(test_set[i]);
-        rmse += std::pow(resp-ground_truth[i], 2);
+        // TODO divided by 100000 for cal housing
+        rmse += std::pow( ((resp-ground_truth[i])-gt_mean)/gt_std, 2);
         //if(std::abs(resp-ground_truth[i]) < ground_truth[i]*0.2) ++correct;
         //if(i % 197 == 0) std::cout << "Pred: " << resp
         //<< "\tGt: " << ground_truth[i]

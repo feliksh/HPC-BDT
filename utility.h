@@ -7,9 +7,12 @@
 #define swape(x,y){temp=x;x=y;y=temp;}
 #define swtemp(x,y,z){temp=x;x=y;y=temp;}
 
-#define parallel_sort true
-#define par_dt true
-#define par_backfitting true
+#define parallel_sort false
+#define par_dt false
+#define par_backfitting false
+
+#define chrono_now std::chrono::high_resolution_clock::now()
+#define chrono_diff(b,e) std::chrono::duration_cast<std::chrono::milliseconds>(e-b)
 
 void transpose(std::vector<std::vector<float>> &data, std::vector<std::vector<float>> &transposed){
     for(int i=0; i<data.size(); ++i){
@@ -31,6 +34,23 @@ void shuffle_data(std::vector<std::vector<float>> &data, std::vector<float> &gt)
     }
 }
 
+float calc_mean(std::vector<float> &data){
+    float mean=0;
+    float n = data.size();
+    for(int idx=0; idx<n; ++idx){
+        mean+= data[idx]/n;
+    }
+    return mean;
+}
+
+float calc_std(std::vector<float> &data, float mean){
+    float std=0;
+    float n = data.size();
+    for(int idx=0; idx<n; ++idx){
+        std += (std::pow(data[idx]-mean, 2)/n);
+    }
+    return std::sqrt(std);
+}
 
 // odd-even sort in sequential mode
 void sequential_sort(std::vector<float>* data, unsigned int size){
@@ -54,23 +74,53 @@ void sequential_sort(std::vector<float>* data, unsigned int size){
     }
 }
 
+void odd_even_index_sort(std::vector<float> &data, std::vector<int> &indices){
+    bool isSorted = false;
+    int size = data.size();
+
+    int temp=0;
+    while (!isSorted){
+        isSorted = true;
+        for (int i=1; i<=size-2; i=i+2){
+            if (data[indices[i]] < data[indices[i+1]]){
+                //swape(indices[i],indices[i+1]);
+                temp = indices[i];
+                indices[i] = indices[i+1];
+                indices[i+1] = temp;
+                isSorted = false;
+            }
+        }
+        for (int i=0; i<=size-2; i=i+2){
+            if (data[indices[i]] < data[indices[i+1]]){
+                //swape(indices[i],indices[i+1])
+                temp = indices[i];
+                indices[i] = indices[i+1];
+                indices[i+1] = temp;
+                isSorted = false;
+            }
+        }
+    }
+}
+
 
 // TODO check bob correctness
 void sort_features(std::vector<std::vector<float>>& data,
                    std::vector<std::vector<int>>& runs,
                    std::vector<std::vector<int>>& sorted){
-
-    std::vector<int> bob;
-#pragma omp parallel if(parallel_sort) private(bob)
-    {
-#pragma for schedule(dynamic)
-        for (int feat = 0; feat < data.size(); ++feat) {
+    int n_feats = data[0].size();
+    int N = data.size();
+    #pragma omp parallel for if(parallel_sort) schedule(dynamic)
+        for (int feat=0; feat<N; ++feat) {
             int count=0;
-            std::vector<int> v(data[0].size());
+            std::vector<int> v(n_feats);
+            std::vector<int> bob;
+
             std::iota(v.begin(), v.end(), 0);
-            std::sort(v.begin(), v.end(), [&](int i, int j) { return data[feat][i] > data[feat][j]; });
-            sorted[feat].assign(v.begin(), v.end());
-            for (int i = 0; i < data[0].size() - 1; ++i) {
+            odd_even_index_sort(data[feat], v);
+            //std::sort(v.begin(), v.end(), [&](int i, int j) { return data[feat][i] > data[feat][j]; });
+            #pragma omp critical
+                sorted[feat].assign(v.begin(), v.end());
+            for (int i=0; i<n_feats-1; ++i) {
                 if (data[feat][v[i]] == data[feat][v[i+1]])
                     ++count;
                 else {
@@ -78,11 +128,11 @@ void sort_features(std::vector<std::vector<float>>& data,
                     count = 0;
                 }
             }
-            bob.push_back(count + 1);
-            runs[feat].assign(bob.begin(), bob.end());
+            bob.push_back(count+1);
+            #pragma omp critical
+                runs[feat].assign(bob.begin(), bob.end());
             bob.clear();
         }
-    };
 }
 
 #endif //HPC_BDT_UTILITY_H
