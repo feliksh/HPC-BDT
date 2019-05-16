@@ -7,12 +7,13 @@
 #define swape(x,y){temp=x;x=y;y=temp;}
 #define swtemp(x,y,z){temp=x;x=y;y=temp;}
 
-#define parallel_sort false
+#define parallel_sort true
 #define par_dt false
-#define par_backfitting false
+#define par_backfitting true
 
 #define chrono_now std::chrono::high_resolution_clock::now()
 #define chrono_diff(b,e) std::chrono::duration_cast<std::chrono::milliseconds>(e-b)
+#define chrono_prec(b,e) std::chrono::duration_cast<std::chrono::microseconds>(e-b)
 
 void transpose(std::vector<std::vector<float>> &data, std::vector<std::vector<float>> &transposed){
     for(int i=0; i<data.size(); ++i){
@@ -116,8 +117,9 @@ void sort_features(std::vector<std::vector<float>>& data,
             std::vector<int> bob;
 
             std::iota(v.begin(), v.end(), 0);
-            odd_even_index_sort(data[feat], v);
-            //std::sort(v.begin(), v.end(), [&](int i, int j) { return data[feat][i] > data[feat][j]; });
+            //odd_even_index_sort(data[feat], v);
+            // TODO: execution policy
+            std::sort(v.begin(), v.end(), [&](int i, int j) { return data[feat][i] > data[feat][j]; });
             #pragma omp critical
                 sorted[feat].assign(v.begin(), v.end());
             for (int i=0; i<n_feats-1; ++i) {

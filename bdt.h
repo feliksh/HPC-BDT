@@ -16,12 +16,14 @@
 typedef std::vector<std::vector<float>> matrix;
 typedef std::vector<std::vector<int>> imatrix;
 
+
 /**
  * static
  * const
  * moved things in heap instead of stack, because of memory (problems)
  */
 
+// TODO: takes 73 ms. in avg. but it is the most time consuming since it's called often
 // returns (gain, c) on that feature
 // shift=1 when creating decision table, shift>1 when backfitting
 std::tuple<long double, int> gain_on_feature(const int nr_leaves, const unsigned long N, const std::vector<int>& L,
@@ -33,6 +35,7 @@ std::tuple<long double, int> gain_on_feature(const int nr_leaves, const unsigned
     std::vector<int> count(nr_leaves, 0);
     std::vector<double> summer(nr_leaves, 0);
 
+    // 1 ms.
     for (int m = 0; m < N; ++m) {
         count[L[m]] += 1;
         summer[L[m]] += response[m];
@@ -41,20 +44,24 @@ std::tuple<long double, int> gain_on_feature(const int nr_leaves, const unsigned
     auto doc_id = sorted_feature.begin();
 
     idx=0;
-    // loop on nr of values of that feature
+
+    // loop on nr of values of that feature - 30ms. most expensive part
     for (const int &r : run) {
         act=0;
-        // update count and summer
+        // update count and summer - most consuming
         // by changing position of docs having that value on feature j
         while(act!=r){
-            count[L[*doc_id]] -= 1;
-            summer[L[*doc_id]] -= response[*doc_id];
-            count[L[*doc_id]-shift] += 1;
-            summer[L[*doc_id]-shift] += response[*doc_id];
+            auto ptr = *doc_id; // gained 8ms
+            int lptr = L[ptr];
+            count[lptr] -= 1;
+            summer[lptr] -= response[ptr];
+            count[lptr-shift] += 1;
+            summer[lptr-shift] += response[ptr];
             ++doc_id;
             ++act;
         }
         idx += act;
+
         // calculate gain for that combination of (x_j, c)
         g = 0;
         for(int k=0; k<nr_leaves; k=k+2){
@@ -133,6 +140,10 @@ dt<d> create_dt(matrix& features, imatrix& sorted_features,
     long double best_gain;
     float best_c=0;
 
+    auto all_begin = std::chrono::high_resolution_clock::now();
+    std::chrono::milliseconds::rep sum_times(0); // TODO count time for gain on feature, sum all calls
+    std::chrono::milliseconds::rep sumsum_times(0);
+
     std::vector<int> L(N, 1);
 
     dt<d> result_dt;
@@ -149,8 +160,13 @@ dt<d> create_dt(matrix& features, imatrix& sorted_features,
             for(int j=0; j<n_feat; ++j){
                 // loop on nr of values of that feature
                 // returns a tuple with (gain, idx on sorted feature j)
+                auto sort_begin = std::chrono::high_resolution_clock::now();
                 std::tuple<long double, int> gc =
                         gain_on_feature(nr_leaves, N, L, response, sorted_features[j], runs[j], 1);
+                auto sort_end = std::chrono::high_resolution_clock::now();
+                auto sort_elapsed = chrono_diff(sort_begin, sort_end);
+                sum_times += sort_elapsed.count();
+
                 // TODO critical section or selection of best gain
                 if(std::get<0>(gc) > best_gain){
                     best_gain = std::get<0>(gc);
@@ -160,10 +176,13 @@ dt<d> create_dt(matrix& features, imatrix& sorted_features,
             } // end loop on feature
         };
 
+        sumsum_times += sum_times/n_feat;
+
         // int mask = 0x00000001;
         auto doc_id = sorted_features[best_feature].begin();
         auto end = sorted_features[best_feature].end();
         auto best_point = doc_id+best_idx;
+        // TODO: transform while in a for loop, since it can be optimized easier... how?
         if(t < d-1) {
             // update docs which have feature x_j > c
             while(doc_id!=best_point){
@@ -192,6 +211,9 @@ dt<d> create_dt(matrix& features, imatrix& sorted_features,
 
     }// end loop on level of tree
     //result_dt.printer();
+
+    std::cout << "Time spent on calc gain:\t" << sumsum_times/d << "ms.\n";
+
     backfitting_sse(&result_dt, features, sorted_features, runs, L, response, 1);
     return result_dt;
 }
@@ -204,11 +226,7 @@ bdt_scoring<d, t>* train(matrix& training_set, matrix& transposed_features, imat
     bdt_scoring<d, t> *bdt_table;
     bdt_table = new bdt_scoring<d,t>();
     std::vector<float> residuals(N, 0);
-    //float rmse=0;
-
-    // TODO remove this transpose, already done in main
-    //std::vector<std::vector<float>> transposed_features(n_features, std::vector<float>(N, 0));
-    //transpose(training_set, transposed_features);
+    float rmse=0;
 
     // TODO: add criterion to stop nr of tables
     auto dt_begin = chrono_now;
@@ -218,27 +236,27 @@ bdt_scoring<d, t>* train(matrix& training_set, matrix& transposed_features, imat
     bdt_table->add_dt(initial_dt);
     for(int e=0; e<N; ++e){
         residuals[e] = response[e]-initial_dt.predict(training_set[e]);
-        //rmse += std::pow(initial_dt.predict(training_set[e])-response[e], 2);
+        rmse += std::pow(initial_dt.predict(training_set[e])-response[e], 2);
     }
 
-    //rmse /= N;
-    //rmse = std::sqrt(rmse);
-    //std::cout << "RMSE at lv 0: " << rmse << std::endl;
+    rmse /= N;
+    rmse = std::sqrt(rmse);
+    // std::cout << "RMSE at lv 0: " << rmse << std::endl;
     //initial_dt.printer();
 
     for(int tab=1; tab<t; ++tab){
         dt<d> decision_tab = create_dt<d>(transposed_features, sorted_feats, runs, residuals);
         bdt_table->add_dt(decision_tab);
-        //rmse=0;
+        rmse=0;
         for(int e=0; e<N; ++e) {
             float nrm = bdt_table->predict(training_set[e]);
-            //rmse += std::pow(nrm-response[e], 2);
+            rmse += std::pow(nrm-response[e], 2);
             residuals[e] = response[e] - bdt_table->predict(training_set[e]);
             //residuals[e] = response[e] - bdt_table->predict(training_set[e]);
         }
-        //rmse /= N;
-        //rmse = std::sqrt(rmse);
-        //std::cout << "RMSE at lv " << tab << ": " << rmse << std::endl;
+        rmse /= N;
+        rmse = std::sqrt(rmse);
+        std::cout << "RMSE at lv " << tab << ": " << rmse << std::endl;
     }
 
     // std::cout << "Time dt: " << dt_elapsed.count() << "ms.\n";

@@ -28,7 +28,7 @@ struct dt{
     void fill_level(std::vector<int> &L, std::vector<float> &response, int feat, float cut, short level){
         features[level] = feat;
         cuts[level] = cut;
-        // TODO why updating if not last level? because of father
+        // TODO why updating if not last level? because of father!
         update_predictions(L, response, level);
     }
 
