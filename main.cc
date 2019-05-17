@@ -69,11 +69,11 @@ std::vector<std::vector<float>> extract_data(const std::string *filename, std::v
 
 int main(int argc, char* argv[]){
     /**
-     * file "winequality":  11 features on   4'898 objects
-     * file2 "cal_housing":  8 features on  20'639 objects
-     * news "NewsModified": 59 features on  39'644 objects
-     * music "year_pred_m": 90 features on 515'344 objects
-     * toy   "toy2":         5 features on      61 objects
+     * file "winequality":  11 features on   4'899 objects
+     * file2 "cal_housing":  8 features on  20'640 objects
+     * news "NewsModified": 59 features on  39'645 objects
+     * music "year_pred_m": 90 features on 515'345 objects
+     * toy   "toy2":         5 features on      60 objects
      * gender "gender":      2 features on     208 objects
      * ai_example "ai":      3 features on      10 objects
      */
@@ -87,10 +87,10 @@ int main(int argc, char* argv[]){
     std::string toy = parent+"toy2.csv";
     std::string gender = parent+"gender.csv";
     std::string ai_example = parent+"ai.data";
-    int N=0, n_runs=4;
+    int N=0, n_runs=1;
     unsigned long n_features = 0;
     unsigned short const d=4;
-    int const tables=1;
+    int const tables=100;
     srand(23);
 
     std::vector <std::chrono::milliseconds::rep> sort_times(n_runs);
@@ -104,20 +104,25 @@ int main(int argc, char* argv[]){
     float gt_mean;
     float gt_std;
 
-    int test_size = N / 10;
+    int test_size = (N / 10)*2;
     // for music dataset
     // int test_size = 51630;
     int train_size = N - test_size;
+    int validation_size = (train_size/10)*2;
+    train_size -= validation_size;
 
     for(int i=0; i<n_runs; ++i) {
         // take a random permutation of data
         shuffle_data(data, gt);
 
         std::vector<std::vector<float>> training_set(data.begin(), data.begin() + train_size);
-        std::vector<std::vector<float>> test_set(data.begin() + train_size, data.end());
+        std::vector<std::vector<float>> validation_set(data.begin()+train_size,
+                data.begin()+train_size+validation_size);
+        std::vector<std::vector<float>> test_set(data.begin()+train_size+validation_size, data.end());
 
         std::vector<float> train_gt(gt.begin(), gt.begin() + train_size);
-        std::vector<float> test_gt(gt.begin() + train_size, gt.end());
+        std::vector<float> validation_gt(gt.begin()+train_size, gt.begin()+train_size+validation_size);
+        std::vector<float> test_gt(gt.begin()+train_size+validation_size, gt.end());
 
         gt_mean = calc_mean(train_gt);
         gt_std = calc_std(train_gt, gt_mean);
@@ -137,7 +142,8 @@ int main(int argc, char* argv[]){
 
         // start learning step
         auto train_begin = chrono_now;
-        bdt_scoring<d, tables> *bdt = train<d, tables>(training_set, transposed_features, sorted_feats, runs, train_gt);
+        bdt_scoring<d, tables> *bdt = train<d, tables>(training_set, transposed_features, sorted_feats,
+                runs, train_gt, validation_set, validation_gt);
         auto train_end = chrono_now;
         auto train_elapsed = chrono_diff(train_begin, train_end);
         // std::cout << "Time train:\t" << train_elapsed.count() << "ms." << std::endl;

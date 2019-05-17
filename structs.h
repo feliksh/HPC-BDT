@@ -32,18 +32,25 @@ struct dt{
         update_predictions(L, response, level);
     }
 
+
     void update_predictions(std::vector<int> &L, std::vector<float> &response, int level){
         unsigned long N = response.size();
         int count[1<<(level+1)];
         memset(count, 0, (1<<(level+1))*sizeof(int));
         memset(predictions, 0, (1<<d)*sizeof(float));
+        // at this point, for level<d-1, values of L have been shifted by a bit, to prepare for next level
         if(level < d-1) {
             for (int i = 0; i < N; ++i) {
                 predictions[L[i] >> 1] += response[i];
                 ++count[L[i] >> 1];
             }
-            for(int i=0; i<(1<<(level+1)); ++i) father_prediction[i] = predictions[i];
-        }else{
+            for(int i=0; i<(1<<(level+1)); ++i){
+                if(count[i] > 0)
+                    father_prediction[i] = predictions[i] / count[i];
+                else
+                    father_prediction[i] = father_prediction[i>>1];
+            }
+        }else{ // for the last level, values of L are not shifted
             for (int i = 0; i < N; ++i) {
                 predictions[L[i]] += response[i];
                 ++count[L[i]];

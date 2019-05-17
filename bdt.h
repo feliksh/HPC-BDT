@@ -83,7 +83,7 @@ std::tuple<long double, int> gain_on_feature(const int nr_leaves, const unsigned
 // TODO check static-ness
 // Cyclic backfitting
 template<unsigned short d>
-void backfitting_sse(dt<d>* dt, const matrix& features, const imatrix& sorted_features,
+void backfitting_cyclic(dt<d>* dt, const matrix& features, const imatrix& sorted_features,
                   const imatrix& runs, std::vector<int>& L, std::vector<float> &response, const int passes){
     unsigned long N = sorted_features[0].size();
     unsigned long n_feat = sorted_features.size();
@@ -212,51 +212,72 @@ dt<d> create_dt(matrix& features, imatrix& sorted_features,
     }// end loop on level of tree
     //result_dt.printer();
 
-    std::cout << "Time spent on calc gain:\t" << sumsum_times/d << "ms.\n";
+    // std::cout << "Time spent on calc gain:\t" << sumsum_times/d << "ms.\n";
 
-    backfitting_sse(&result_dt, features, sorted_features, runs, L, response, 1);
+    backfitting_cyclic(&result_dt, features, sorted_features, runs, L, response, 1);
     return result_dt;
 }
 
 
 template<unsigned d, unsigned short t>
 bdt_scoring<d, t>* train(matrix& training_set, matrix& transposed_features, imatrix& sorted_feats,
-                     imatrix& runs, std::vector<float>& response){
-    unsigned long N = training_set.size();
+                     imatrix& runs, std::vector<float>& train_gt,
+                     matrix& validation_set, std::vector<float>& validation_gt){
+    unsigned long train_size = training_set.size();
+    unsigned long validation_size = validation_gt.size();
     bdt_scoring<d, t> *bdt_table;
     bdt_table = new bdt_scoring<d,t>();
-    std::vector<float> residuals(N, 0);
-    float rmse=0;
+    std::vector<float> residuals(train_size, 0);
+    float rmse=0, best_rmse=0;
+    int best_nr_of_dt=0;
 
     // TODO: add criterion to stop nr of tables
+    // Create the initial decision table
     auto dt_begin = chrono_now;
-    dt<d> initial_dt = create_dt<d>(transposed_features, sorted_feats, runs, response);
+    dt<d> initial_dt = create_dt<d>(transposed_features, sorted_feats, runs, train_gt);
     auto dt_end = chrono_now;
     auto dt_elapsed = chrono_diff(dt_begin, dt_end);
+
+    // add it to the model and calculate residuals
     bdt_table->add_dt(initial_dt);
-    for(int e=0; e<N; ++e){
-        residuals[e] = response[e]-initial_dt.predict(training_set[e]);
-        rmse += std::pow(initial_dt.predict(training_set[e])-response[e], 2);
+    for(int e=0; e<train_size; ++e){
+        residuals[e] = train_gt[e] - bdt_table->predict(training_set[e]); // includes shrinkage
     }
 
-    rmse /= N;
+    // calculate rmse on validation set
+    float difference=0;
+    for(int e=0; e<validation_size; ++e){
+        difference = validation_gt[e] - bdt_table->predict(validation_set[e]);
+        rmse += std::pow(difference, 2);
+    }
+    rmse /= validation_size;
     rmse = std::sqrt(rmse);
-    // std::cout << "RMSE at lv 0: " << rmse << std::endl;
-    //initial_dt.printer();
+    best_rmse = rmse;
+    std::cout << "RMSE at lv 0: " << rmse << std::endl;
+    // initial_dt.printer();
 
+    // procede for successive decision tables
     for(int tab=1; tab<t; ++tab){
         dt<d> decision_tab = create_dt<d>(transposed_features, sorted_feats, runs, residuals);
         bdt_table->add_dt(decision_tab);
-        rmse=0;
-        for(int e=0; e<N; ++e) {
-            float nrm = bdt_table->predict(training_set[e]);
-            rmse += std::pow(nrm-response[e], 2);
-            residuals[e] = response[e] - bdt_table->predict(training_set[e]);
-            //residuals[e] = response[e] - bdt_table->predict(training_set[e]);
+        // update residuals
+        for(int e=0; e<train_size; ++e) {
+            residuals[e] = train_gt[e] - bdt_table->predict(training_set[e]);
         }
-        rmse /= N;
+        // calculare rmse on validation set
+        rmse=0;
+        for(int e=0; e<validation_size; ++e){
+            difference = validation_gt[e] - bdt_table->predict(validation_set[e]);
+            rmse += std::pow(difference, 2);
+        }
+        rmse /= validation_size;
         rmse = std::sqrt(rmse);
+        if(rmse < best_rmse){
+            best_rmse = rmse;
+            best_nr_of_dt = tab;
+        }
         std::cout << "RMSE at lv " << tab << ": " << rmse << std::endl;
+        // decision_tab.printer();
     }
 
     // std::cout << "Time dt: " << dt_elapsed.count() << "ms.\n";
@@ -275,12 +296,7 @@ double test(matrix &test_set, std::vector<float> &ground_truth, bdt_scoring<d,t>
         //if(i==0) bdt_table.looper(test_set[i]);
         //if(i==0) std::cout << "PREDICTION: " << ground_truth[0] << ", GT: " << ground_truth[0] << "\n";
         float resp = bdt_table->predict(test_set[i]);
-        // TODO divided by 100000 for cal housing
         rmse += std::pow( ((resp-ground_truth[i])-gt_mean)/gt_std, 2);
-        //if(std::abs(resp-ground_truth[i]) < ground_truth[i]*0.2) ++correct;
-        //if(i % 197 == 0) std::cout << "Pred: " << resp
-        //<< "\tGt: " << ground_truth[i]
-        //<< "\tDiff: " << std::abs(resp-ground_truth[i]) << "\n";
     }
     rmse /= test_size;
     //std::cout << "Guessed: " << correct << "/" << test_size << " (" << (float)correct/(float)test_size << ")\n";
