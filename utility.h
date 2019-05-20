@@ -8,8 +8,10 @@
 #define swtemp(x,y,z){temp=x;x=y;y=temp;}
 
 #define parallel_sort true
-#define par_dt false
+#define par_dt true
 #define par_backfitting true
+#define par_validation false
+#define par_test false
 
 #define chrono_now std::chrono::high_resolution_clock::now()
 #define chrono_diff(b,e) std::chrono::duration_cast<std::chrono::milliseconds>(e-b)

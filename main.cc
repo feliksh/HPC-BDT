@@ -87,10 +87,10 @@ int main(int argc, char* argv[]){
     std::string toy = parent+"toy2.csv";
     std::string gender = parent+"gender.csv";
     std::string ai_example = parent+"ai.data";
-    int N=0, n_runs=1;
+    int N=0, n_runs=5;
     unsigned long n_features = 0;
     unsigned short const d=4;
-    int const tables=100;
+    int const max_nr_tables=1;
     srand(23);
 
     std::vector <std::chrono::milliseconds::rep> sort_times(n_runs);
@@ -142,7 +142,7 @@ int main(int argc, char* argv[]){
 
         // start learning step
         auto train_begin = chrono_now;
-        bdt_scoring<d, tables> *bdt = train<d, tables>(training_set, transposed_features, sorted_feats,
+        bdt_scoring<d, max_nr_tables> *bdt = train<d, max_nr_tables>(training_set, transposed_features, sorted_feats,
                 runs, train_gt, validation_set, validation_gt);
         auto train_end = chrono_now;
         auto train_elapsed = chrono_diff(train_begin, train_end);
@@ -152,10 +152,10 @@ int main(int argc, char* argv[]){
 
         // start testing step
         auto test_begin = chrono_now;
-        double rmse = test<d, tables>(test_set, test_gt, bdt, gt_mean, gt_std);
+        double rmse = test<d, max_nr_tables>(test_set, test_gt, bdt, gt_mean, gt_std);
         auto test_end = chrono_now;
         auto test_elapsed = chrono_diff(test_begin, test_end);
-        // std::cout << "Time test:\t" << test_elapsed.count() << "ms." << std::endl;
+        // std::cout << "Time test ("<< test_size <<" instances):\t" << test_elapsed.count() << "ms." << std::endl;
 
         //std::cout << "Shot: " << rmse << "/" << test_size << " (" << rmse/test_size << ")\n";
         //std::cout << "RMSE: " << rmse << "\n";
@@ -167,7 +167,6 @@ int main(int argc, char* argv[]){
     for(int i=1; i<n_runs; ++i)
         mean_time += sort_times[i];
     mean_time /= n_runs;
-    std::cout << "\nAvg. Time:\t" << mean_time << "ms.\n";
-    std::cout << "Avg. RMSE: " << sum_rmse/n_runs << "\n";
-
+    std::cout << "\nAvg. Time for train:\t" << mean_time << "ms.\n";
+    std::cout << "RMSE of test set: " << sum_rmse/n_runs << "\n";
 }

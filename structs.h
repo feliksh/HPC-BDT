@@ -5,7 +5,9 @@
 
 #include <cstring>
 #include <sys/param.h>
+
 #define shrink 0.05
+#define par_predict false
 
 
 template <unsigned short d>
@@ -99,14 +101,13 @@ struct dt{
     }
 };
 
-
 template<unsigned short d, unsigned short t>
 struct bdt_scoring{
     std::vector<dt<d>> dts;
-    int pos;
+    int nr_tables;
 
     bdt_scoring(){
-        pos=0;
+        nr_tables=0;
         dts.reserve(t);
     }
 
@@ -114,22 +115,39 @@ struct bdt_scoring{
 
     void add_dt(dt<d> new_dt){
         dts.push_back(new_dt);
-        ++pos;
+        ++nr_tables;
         //dts.push_back(*new_dt);
         // new_dt.printer();
     }
 
     float predict(const std::vector<float>& x){
-        auto beg = dts.begin();
-        auto end = dts.end();
-        //float prediction=(*beg).predict(x);
-        //if(beg==end) return prediction;
         float prediction=0;
+
+        // TODO: move the predict call externally, since dts[e] points for sure to a different memory ptr
+        #pragma omp parallel if(par_predict)
+        {
+            #pragma omp for schedule(static) reduction(+:prediction)
+            for (int e = 0; e < nr_tables; ++e) {
+                // prediction += shrink * dts[e].predict(x);
+                prediction += shrink * dts[e].predict(x);
+            }
+        }
+
+        /** TODO: should be faster and more optimizable and parallelizable to have a normal for loop
+
+        auto beg = dts.begin();
+        auto end = dts.begin()+nr_tables;
 
         for(typename std::vector<dt<d>>::iterator it = beg; it != end; ++it){
             prediction += shrink*(*it).predict(x);
         }
+         **/
         return prediction;
+    }
+
+    // TODO: remove remaining tables?
+    void set_optimal_nr_tables(int optimal_nr_tables){
+        nr_tables = optimal_nr_tables;
     }
 
     void looper(const std::vector<float>& x){
