@@ -9,6 +9,9 @@
 #define shrink 0.05
 #define par_predict false
 
+typedef std::vector<std::vector<float>> matrix;
+typedef std::vector<std::vector<int>> imatrix;
+
 
 template <unsigned short d>
 struct dt{
@@ -124,13 +127,11 @@ struct bdt_scoring{
         float prediction=0;
 
         // TODO: move the predict call externally, since dts[e] points for sure to a different memory ptr
-        #pragma omp parallel if(par_predict)
-        {
-            #pragma omp for schedule(static) reduction(+:prediction)
-            for (int e = 0; e < nr_tables; ++e) {
-                // prediction += shrink * dts[e].predict(x);
-                prediction += shrink * dts[e].predict(x);
-            }
+        // static,1 ?
+        #pragma omp parallel for if(par_predict) schedule(static) reduction(+:prediction)
+        for (int e = 0; e < nr_tables; ++e) {
+            // prediction += shrink * dts[e].predict(x);
+            prediction += shrink * dts[e].predict(x);
         }
 
         /** TODO: should be faster and more optimizable and parallelizable to have a normal for loop

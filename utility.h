@@ -2,7 +2,7 @@
 #ifndef HPC_BDT_UTILITY_H
 #define HPC_BDT_UTILITY_H
 
-#include "bdt.h"
+//#include "bdt.h" //TODO: why this include + move extract data here
 
 #define swape(x,y){temp=x;x=y;y=temp;}
 #define swtemp(x,y,z){temp=x;x=y;y=temp;}
@@ -10,8 +10,10 @@
 #define parallel_sort true
 #define par_dt true
 #define par_backfitting true
-#define par_validation false
+#define par_validation true
 #define par_test false
+
+#define nr_backfitting_passes 1
 
 #define chrono_now std::chrono::high_resolution_clock::now()
 #define chrono_diff(b,e) std::chrono::duration_cast<std::chrono::milliseconds>(e-b)

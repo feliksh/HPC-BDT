@@ -12,10 +12,10 @@
 #include <cfloat>
 #include "structs.h"
 #include "utility.h"
+#include "backfitting.h"
 
-typedef std::vector<std::vector<float>> matrix;
-typedef std::vector<std::vector<int>> imatrix;
-
+std::chrono::milliseconds::rep time_holder(0);
+int time_counter(0);
 
 /**
  * static
@@ -24,13 +24,18 @@ typedef std::vector<std::vector<int>> imatrix;
  */
 
 // TODO: takes 73 ms. in avg. but it is the most time consuming since it's called often
+/**
+ * it's better to improve this function in sequential fashion, since it makes not much sense
+ * to have parallelization inside, it's better to have parallelization outside.
+ *
+ */
 // returns (gain, c) on that feature
 // shift=1 when creating decision table, shift>1 when backfitting
 std::tuple<long double, int> gain_on_feature(const int nr_leaves, const unsigned long N, const std::vector<int>& L,
                                         std::vector<float>& response,
                                         const std::vector<int>& sorted_feature,
                                         const std::vector<int>& run, const int shift) {
-    int act, idx, best_idx=0; //TODO probably shift should be +1
+    int act, idx, best_idx=0;
     long double g=0, best_gain=-LDBL_MAX;
     std::vector<int> count(nr_leaves, 0);
     std::vector<double> summer(nr_leaves, 0);
@@ -81,55 +86,57 @@ std::tuple<long double, int> gain_on_feature(const int nr_leaves, const unsigned
 }
 
 // TODO check static-ness
+/**
+ * this function is called outside of the parallel part, thus it doesn't cause any nested loop.
+ * it makes sense to parallelize as much as possible
+ */
+ /**
 // Cyclic backfitting
 template<unsigned short d>
 void backfitting_cyclic(dt<d>* dt, const matrix& features, const imatrix& sorted_features,
-                  const imatrix& runs, std::vector<int>& L, std::vector<float> &response, const int passes){
+                  const imatrix& runs, std::vector<int>& L, std::vector<float> &response){
     unsigned long N = sorted_features[0].size();
     unsigned long n_feat = sorted_features.size();
     long double best_gain=-LDBL_MAX;
     int best_idx=0, best_feature=-1;
 
-    for(int pass=0; pass<passes; ++pass){
-        for(int t=0; t<d; ++t){
-            best_gain=-LDBL_MAX;
-            // remove the cut
-            for(int m=0; m<N; ++m) L[m] |= (1<<(d-t-1));
-            // loop on features
-            #pragma omp parallel if(par_backfitting) shared(N,L,response,sorted_features,runs,t)
-            {
-                #pragma omp for schedule(dynamic)
-                for(int j=0; j<n_feat; ++j){
-                    // loop on nr of values of that feature
-                    // returns a tuple with (gain, idx on sorted feature j)
-                    // TODO: check gain on t
-                    std::tuple<long double, int> gc =
-                            gain_on_feature(1<<d, N, L, response, sorted_features[j], runs[j], 1<<(d-t-1));
-                    // TODO: critical section?
-                    if(std::get<0>(gc) > best_gain){
-                        best_gain = std::get<0>(gc);
-                        best_idx = std::get<1>(gc);
-                        best_feature = j;
-                    }
-                } // end loop on feature
-            };
-            auto doc_id = sorted_features[best_feature].begin();
-            //auto end = sorted_features[best_feature].end();
-            auto best_point = doc_id+best_idx;
-            // update docs which have feature x_j > c
-            while(doc_id!=best_point){
-                L[*doc_id] -= (1<<(d-t-1));
-                ++doc_id;
-            }
-            float best_c = features[best_feature][*best_point];
-            (*dt).features[t] = best_feature;
-            (*dt).cuts[t] = best_c;
+    for(int t=0; t<d; ++t){
+        best_gain=-LDBL_MAX;
+        // remove the cut
+        for(int m=0; m<N; ++m) L[m] |= (1<<(d-t-1));
+        // loop on features
+        #pragma omp parallel if(par_backfitting) shared(N,L,response,sorted_features,runs,t)
+        {
+            #pragma omp for schedule(dynamic)
+            for(int j=0; j<n_feat; ++j){
+                // loop on nr of values of that feature
+                // returns a tuple with (gain, idx on sorted feature j)
+                // TODO: check gain on t
+                std::tuple<long double, int> gc =
+                        gain_on_feature(1<<d, N, L, response, sorted_features[j], runs[j], 1<<(d-t-1));
+                // TODO: critical section?
+                if(std::get<0>(gc) > best_gain){
+                    best_gain = std::get<0>(gc);
+                    best_idx = std::get<1>(gc);
+                    best_feature = j;
+                }
+            } // end loop on feature
+        };
+        auto doc_id = sorted_features[best_feature].begin();
+        //auto end = sorted_features[best_feature].end();
+        auto best_point = doc_id+best_idx;
+        // update docs which have feature x_j > c
+        while(doc_id!=best_point){
+            L[*doc_id] -= (1<<(d-t-1));
+            ++doc_id;
         }
+        float best_c = features[best_feature][*best_point];
+        (*dt).features[t] = best_feature;
+        (*dt).cuts[t] = best_c;
     }
     (*dt).update_predictions(L, response, d-1);
 }
-
-
+**/
 template<unsigned short d>
 dt<d> create_dt(matrix& features, imatrix& sorted_features,
                 imatrix& runs, std::vector<float>& response){
@@ -140,10 +147,7 @@ dt<d> create_dt(matrix& features, imatrix& sorted_features,
     long double best_gain;
     float best_c=0;
 
-    // auto all_begin = std::chrono::high_resolution_clock::now();
-    std::chrono::milliseconds::rep sum_times(0); // TODO count time for gain on feature, sum all calls
-    std::chrono::milliseconds::rep sumsum_times(0);
-
+    // TODO: parallelize? lol
     std::vector<int> L(N, 1);
 
     dt<d> result_dt;
@@ -167,12 +171,14 @@ dt<d> create_dt(matrix& features, imatrix& sorted_features,
                 // auto sort_elapsed = chrono_diff(sort_begin, sort_end);
                 // sum_times += sort_elapsed.count();
 
-                // TODO critical section or selection of best gain
-                if(std::get<0>(gc) > best_gain){
-                    best_gain = std::get<0>(gc);
-                    best_idx = std::get<1>(gc);
-                    best_feature = j;
-                }
+                #pragma omp critical
+                {
+                    if (std::get<0>(gc) > best_gain) {
+                        best_gain = std::get<0>(gc);
+                        best_idx = std::get<1>(gc);
+                        best_feature = j;
+                    }
+                };
             } // end loop on feature
         };
 
@@ -182,8 +188,9 @@ dt<d> create_dt(matrix& features, imatrix& sorted_features,
         auto doc_id = sorted_features[best_feature].begin();
         auto end = sorted_features[best_feature].end();
         auto best_point = doc_id+best_idx;
-        auto dt_begin = chrono_now;
-        // TODO: transform while in a for loop, since it can be optimized easier... how?
+
+        // TODO: can't be better because there are random accesses to L, no caching
+        // TODO: try to unroll it, make 4 calls, pass one to each thread
         if(t < d-1) {
             // update docs which have feature x_j > c
             while(doc_id!=best_point){
@@ -206,10 +213,6 @@ dt<d> create_dt(matrix& features, imatrix& sorted_features,
                 ++doc_id;
             }
         }
-        auto dt_end = chrono_now;
-        auto dt_elapsed = chrono_prec(dt_begin, dt_end);
-        // sum_times += dt_elapsed.count();
-        std::cout << "Time spent on last part:\t" << dt_elapsed.count() << "micros.\n";
 
         // update level t of decision table
         // best_c = features[best_feature][sorted_features[best_feature][best_idx]];
@@ -217,80 +220,140 @@ dt<d> create_dt(matrix& features, imatrix& sorted_features,
         result_dt.fill_level(L, response, best_feature, best_c, t);
 
     }// end loop on level of tree
-    //result_dt.printer();
 
+    for(int pass=0; pass<nr_backfitting_passes; ++pass) {
+        backfitting_cyclic(&result_dt, features, sorted_features, runs, L, response);
+        // backfitting_random(&result_dt, features, sorted_features, runs, L, response);
+        // backfitting_greedy(&result_dt, features, sorted_features, runs, L, response);
+    }
 
-    backfitting_cyclic(&result_dt, features, sorted_features, runs, L, response, 1);
     return result_dt;
 }
-
 
 template<unsigned d, unsigned short t>
 bdt_scoring<d, t>* train(matrix& training_set, matrix& transposed_features, imatrix& sorted_feats,
                      imatrix& runs, std::vector<float>& train_gt,
-                     matrix& validation_set, std::vector<float>& validation_gt){
+                     matrix& validation_set, std::vector<float>& validation_gt) {
     unsigned long train_size = training_set.size();
     unsigned long validation_size = validation_gt.size();
     bdt_scoring<d, t> *bdt_table;
-    bdt_table = new bdt_scoring<d,t>();
+    bdt_table = new bdt_scoring<d, t>();
     std::vector<float> residuals(train_size, 0);
-    float rmse=0, best_rmse=0;
-    int best_nr_of_dt=0;
+    std::vector<float> prediction(train_size + validation_size, 0);
+    float rmse = 0, best_rmse = 0;
+    int best_nr_of_dt = 0;
 
     // TODO: add criterion to stop nr of tables
     // Create the initial decision table
-    auto dt_begin = chrono_now;
+    // dt<d> initial_dt = old_create_dt<d>(transposed_features, sorted_feats, runs, train_gt);
     dt<d> initial_dt = create_dt<d>(transposed_features, sorted_feats, runs, train_gt);
-    auto dt_end = chrono_now;
-    auto dt_elapsed = chrono_diff(dt_begin, dt_end);
+    dt<d> decision_tab; // for later
 
-    // add it to the model and calculate residuals
+    // add it to the model, compute predictions, compute residuals
     bdt_table->add_dt(initial_dt);
-    #pragma omp parallel for if(par_validation) schedule(static)
-    for (int e = 0; e < train_size; ++e) {
-        residuals[e] = train_gt[e] - bdt_table->predict(training_set[e]); // includes shrinkage
-    }
 
-    // calculate rmse on validation set
-    #pragma omp parallel for if(par_validation) schedule(static) reduction(+:rmse)
-    for (int e = 0; e < validation_size; ++e) {
-        float difference = validation_gt[e] - bdt_table->predict(validation_set[e]);
-        rmse += std::pow(difference, 2);
+    // auto par_begin = chrono_now;
+    #pragma omp parallel if (par_validation)
+    {
+        #pragma omp for schedule(static) nowait
+        for (int e = 0; e < train_size; ++e) {
+            prediction[e] += shrink * initial_dt.predict(training_set[e]);
+            residuals[e] = train_gt[e] - prediction[e];
+        }
+
+        // calculate rmse on validation set
+        #pragma omp for schedule(static) reduction(+:rmse)
+        for (int e = 0; e < validation_size; ++e) {
+            prediction[e + train_size] += shrink * initial_dt.predict(validation_set[e]);
+            float difference = validation_gt[e] - prediction[e + train_size];
+            rmse += std::pow(difference, 2);
+        }
     }
+    // auto par_end = chrono_now;
+    // auto par_diff = chrono_diff(par_begin, par_end);
+    // std::cout << "time for par validation:\t" << par_diff.count() << "ms.\n";
+    // time_holder += par_diff.count();
+    // ++time_counter;
 
     rmse /= validation_size;
     rmse = std::sqrt(rmse);
     best_rmse = rmse;
-    std::cout << "RMSE at lv 0: " << rmse << std::endl;
+    // std::cout << "RMSE at lv 0: " << rmse << std::endl;
     // initial_dt.printer();
 
     // procede for successive decision tables
+    // TODO: make predict a vector and update as nr of tables grows
+    // TODO: make these vectors const
+    // TODO: ordered
+
     for (int tab = 1; tab < t; ++tab) {
-        dt<d> decision_tab = create_dt<d>(transposed_features, sorted_feats, runs, residuals);
-        bdt_table->add_dt(decision_tab);
         // update residuals
-        #pragma omp parallel for if(par_validation) schedule(static)
+        /** old version 1 **
         for (int e = 0; e < train_size; ++e) {
             residuals[e] = train_gt[e] - bdt_table->predict(training_set[e]);
         }
+        ** end old ver1 **/
 
-        // calculare rmse on validation set
-        rmse = 0;
-        #pragma omp parallel for if(par_validation) schedule(static) reduction(+:rmse)
-        for (int e = 0; e < validation_size; ++e) {
-            float difference = validation_gt[e] - bdt_table->predict(validation_set[e]);
-            rmse += std::pow(difference, 2);
+        /** old version 2 ** // There is a little improvement
+        #pragma omp parallel if(par_validation)
+        {
+            std::vector<float> predictions(train_size);
+            #pragma omp for schedule(static)
+            for (int e = 0; e < train_size; ++e) {
+                predictions[e] = bdt_table->predict(training_set[e]);
+            }
+            #pragma omp for schedule(static)
+            for (int e = 0; e < train_size; ++e) {
+                predictions[e] = train_gt[e] - predictions[e];
+            }
         }
+        ** end old ver2 **/
+
+        // TODO: replace call residual=gt-prediction, using fact that gt is fixed
+        // TODO: oh shit, 12x improvement
+        // TODO: that's big (even though it's only -120ms)
+        /**
+         * probably due to the fact that the compiler was not able to understand that
+         * the call to bdt->predict could have been seen as a single value.
+         * it had to call predict and create the environment for that call, and thus
+         * loosing a lot of time before having a final value. while in this version
+         * the calculation is trivial and the call to predict function of the dt is
+         * probably inlineable (can try to specify inline keyword).
+         * TODO: can try to make 2 for loops, one for predict[e] and one for resid[e]
+         */
+        // auto par_begin = chrono_now;
+
+        // there is parallelism inside create_dt, so it's better not having this call inside pragma
+        decision_tab = create_dt<d>(transposed_features, sorted_feats, runs, residuals);
+        bdt_table->add_dt(decision_tab);
+        rmse = 0;
+
+        #pragma omp parallel if(par_validation)
+        {
+            #pragma omp for schedule(static) nowait
+            for (int e = 0; e < train_size; ++e) {
+                prediction[e] += shrink * decision_tab.predict(training_set[e]);
+                residuals[e] = train_gt[e] - prediction[e];
+            }
+
+            // calculare rmse on validation set
+            #pragma omp for schedule(static) reduction(+:rmse)
+            for (int e = 0; e < validation_size; ++e) {
+                prediction[e + train_size] += shrink * decision_tab.predict(validation_set[e]);
+                float difference = validation_gt[e] - prediction[e + train_size];
+                rmse += std::pow(difference, 2);
+            }
+        }
+
         rmse /= validation_size;
         rmse = std::sqrt(rmse);
         if (rmse < best_rmse) {
             best_rmse = rmse;
             best_nr_of_dt = tab;
         }
-        if (tab % 10 == 0)
-            std::cout << "RMSE at lv " << tab << ": " << rmse << std::endl;
-        // decision_tab.printer();
     }
+
+    // std::cout << "Avg. time spent on last part:\t" << time_holder/time_counter << "ms.\n";
 
     bdt_table->set_optimal_nr_tables(best_nr_of_dt);
     // std::cout << "Optimal nr of dt: " << best_nr_of_dt+1 << "\n";

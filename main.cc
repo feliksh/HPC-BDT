@@ -87,7 +87,7 @@ int main(int argc, char* argv[]){
     std::string toy = parent+"toy2.csv";
     std::string gender = parent+"gender.csv";
     std::string ai_example = parent+"ai.data";
-    int N=0, n_runs=5;
+    int N=0, n_runs=4;
     unsigned long n_features = 0;
     unsigned short const d=4;
     int const max_nr_tables=1;
@@ -113,7 +113,7 @@ int main(int argc, char* argv[]){
 
     for(int i=0; i<n_runs; ++i) {
         // take a random permutation of data
-        shuffle_data(data, gt);
+        // shuffle_data(data, gt);
 
         std::vector<std::vector<float>> training_set(data.begin(), data.begin() + train_size);
         std::vector<std::vector<float>> validation_set(data.begin()+train_size,
@@ -146,7 +146,7 @@ int main(int argc, char* argv[]){
                 runs, train_gt, validation_set, validation_gt);
         auto train_end = chrono_now;
         auto train_elapsed = chrono_diff(train_begin, train_end);
-        // std::cout << "Time train:\t" << train_elapsed.count() << "ms." << std::endl;
+        std::cout << "Time train:\t" << train_elapsed.count() << "ms." << std::endl;
 
         sort_times[i] = train_elapsed.count();
 
@@ -167,6 +167,7 @@ int main(int argc, char* argv[]){
     for(int i=1; i<n_runs; ++i)
         mean_time += sort_times[i];
     mean_time /= n_runs;
-    std::cout << "\nAvg. Time for train:\t" << mean_time << "ms.\n";
+    std::cout << "avg time for par validation:\t" << time_holder/time_counter << "ms.\n";
+    // std::cout << "\nAvg. Time for train:\t" << mean_time << "ms.\n";
     std::cout << "RMSE of test set: " << sum_rmse/n_runs << "\n";
 }
