@@ -88,10 +88,10 @@ int main(int argc, char* argv[]){
     std::string toy = parent+"toy2.csv";
     std::string gender = parent+"gender.csv";
     std::string ai_example = parent+"ai.data";
-    int N=0, n_runs=5;
+    int N=0, n_runs=10;
     unsigned long n_features = 0;
     unsigned short const d=4;
-    int const max_nr_tables=10;
+    int const max_nr_tables=20;
     srand(23);
     n_threads=1;
     enable_par=false;
