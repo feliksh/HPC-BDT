@@ -91,7 +91,7 @@ int main(int argc, char* argv[]){
     int N=0, n_runs=10;
     unsigned long n_features = 0;
     unsigned short const d=4;
-    int const max_nr_tables=20;
+    int const max_nr_tables=1;
     srand(23);
     n_threads=1;
     enable_par=false;
@@ -199,7 +199,7 @@ int main(int argc, char* argv[]){
             mean_time += sort_times[i];
         mean_time /= n_runs;
         // std::cout << "avg time for par validation:\t" << time_holder/time_counter << "ms.\n";
-        std::cout << "\nAvg. Time for train:\t" << mean_time << "ms.\n";
+        std::cout << "Avg. Time for train:\t" << mean_time << "ms.\n";
 
         myfile.open(filename, std::ios::app);
         myfile << n_threads << "," << mean_time << "\n";
