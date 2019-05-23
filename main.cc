@@ -79,7 +79,7 @@ int main(int argc, char* argv[]){
      */
     // init chrono
     // std::string parent = "/home/felix/Desktop/universita/master/high-performance-computing/HPC-BDT/datasets/";
-    std::string parent = "~/FeliksHPC/";
+    std::string parent = "../";
     std::string file = parent+"winequality-white.csv"; // sep=';' TODO: change separator
     std::string file2 = parent+"cal_housing.data"; // too big values of response
     //std::string news = parent+"OnlineNewsPopularity.csv";
