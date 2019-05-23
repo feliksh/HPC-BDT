@@ -158,7 +158,7 @@ dt<d> create_dt(matrix& features, imatrix& sorted_features,
         best_gain=-LDBL_MAX, best_idx=0, best_feature=-1;
 
         // loop on features
-        #pragma omp parallel if(par_dt)
+        #pragma omp parallel if(enable_par && par_dt)
         {
             #pragma omp for schedule(dynamic)
             for(int j=0; j<n_feat; ++j){
@@ -253,7 +253,7 @@ bdt_scoring<d, t>* train(matrix& training_set, matrix& transposed_features, imat
     bdt_table->add_dt(initial_dt);
 
     // auto par_begin = chrono_now;
-    #pragma omp parallel if (par_validation)
+    #pragma omp parallel if (enable_par && par_validation)
     {
         #pragma omp for schedule(static) nowait
         for (int e = 0; e < train_size; ++e) {
@@ -268,7 +268,7 @@ bdt_scoring<d, t>* train(matrix& training_set, matrix& transposed_features, imat
             float difference = validation_gt[e] - prediction[e + train_size];
             rmse += std::pow(difference, 2);
         }
-    }
+    };
     // auto par_end = chrono_now;
     // auto par_diff = chrono_diff(par_begin, par_end);
     // std::cout << "time for par validation:\t" << par_diff.count() << "ms.\n";
@@ -328,7 +328,7 @@ bdt_scoring<d, t>* train(matrix& training_set, matrix& transposed_features, imat
         bdt_table->add_dt(decision_tab);
         rmse = 0;
 
-        #pragma omp parallel if(par_validation)
+        #pragma omp parallel if(enable_par && par_validation)
         {
             #pragma omp for schedule(static) nowait
             for (int e = 0; e < train_size; ++e) {
@@ -343,7 +343,7 @@ bdt_scoring<d, t>* train(matrix& training_set, matrix& transposed_features, imat
                 float difference = validation_gt[e] - prediction[e + train_size];
                 rmse += std::pow(difference, 2);
             }
-        }
+        };
 
         rmse /= validation_size;
         rmse = std::sqrt(rmse);
@@ -369,7 +369,7 @@ double test(matrix &test_set, std::vector<float> &ground_truth, bdt_scoring<d,t>
     //int correct=0;
 
     //std::cout << "\n\nTESTING:\n";
-    #pragma omp parallel if(par_test)
+    #pragma omp parallel if(enable_par && par_test)
     {
         #pragma omp for schedule(static) reduction(+:rmse)
         for (int i = 0; i < test_size; ++i) {
@@ -378,7 +378,7 @@ double test(matrix &test_set, std::vector<float> &ground_truth, bdt_scoring<d,t>
             float resp = bdt_table->predict(test_set[i]);
             rmse += std::pow(((resp - ground_truth[i]) - gt_mean) / gt_std, 2);
         }
-    }
+    };
     rmse /= test_size;
     //std::cout << "Guessed: " << correct << "/" << test_size << " (" << (float)correct/(float)test_size << ")\n";
     return std::sqrt(rmse);

@@ -27,7 +27,7 @@ void backfitting_cyclic(dt<d>* dt, const matrix& features, const imatrix& sorted
         // remove the cut
         for(int m=0; m<N; ++m) L[m] |= (1<<(d-t-1));
         // loop on features
-        #pragma omp parallel if(par_backfitting)
+        #pragma omp parallel if(enable_par && par_backfitting)
         {
             #pragma omp for schedule(dynamic)
             for(int j=0; j<n_feat; ++j){
@@ -78,7 +78,7 @@ void backfitting_random(dt<d>* dt, const matrix& features, const imatrix& sorted
         last_t = t;
         for(int m=0; m<N; ++m) L[m] |= (1<<(d-t-1));
         // loop on features
-        #pragma omp parallel if(par_backfitting) shared(N,L,response,sorted_features,runs,t)
+        #pragma omp parallel if(enable_par && par_backfitting)
         {
             #pragma omp for schedule(dynamic)
             for(int j=0; j<n_feat; ++j){
@@ -87,12 +87,14 @@ void backfitting_random(dt<d>* dt, const matrix& features, const imatrix& sorted
                 // TODO: check gain on t
                 std::tuple<long double, int> gc =
                         gain_on_feature(1<<d, N, L, response, sorted_features[j], runs[j], 1<<(d-t-1));
-                // TODO: critical section?
-                if(std::get<0>(gc) > best_gain){
-                    best_gain = std::get<0>(gc);
-                    best_idx = std::get<1>(gc);
-                    best_feature = j;
-                }
+                #pragma omp critical
+                {
+                    if (std::get<0>(gc) > best_gain) {
+                        best_gain = std::get<0>(gc);
+                        best_idx = std::get<1>(gc);
+                        best_feature = j;
+                    }
+                };
             } // end loop on feature
         };
         auto doc_id = sorted_features[best_feature].begin();
@@ -128,7 +130,7 @@ void backfitting_greedy(dt<d>* dt, const matrix& features, const imatrix& sorted
             // remove the cut
             for(int m=0; m<N; ++m) temp_L[m] |= (1<<(d-t-1));
             // loop on features
-            #pragma omp parallel if(par_backfitting) shared(N,temp_L,response,sorted_features,runs,t)
+            #pragma omp parallel if(enable_par && par_backfitting)
             {
                 #pragma omp for schedule(dynamic)
                 for(int j=0; j<n_feat; ++j){
@@ -136,13 +138,16 @@ void backfitting_greedy(dt<d>* dt, const matrix& features, const imatrix& sorted
                     // returns a tuple with (gain, idx on sorted feature j)
                     std::tuple<long double, int> gc =
                             gain_on_feature(1<<d, N, temp_L, response, sorted_features[j], runs[j], 1<<(d-t-1));
-                    // TODO: critical section?
-                    if(std::get<0>(gc) > best_gain){
-                        best_gain = std::get<0>(gc);
-                        best_idx = std::get<1>(gc);
-                        best_feature = j;
-                        best_t = t;
-                    }
+
+                    #pragma omp critical
+                    {
+                        if(std::get<0>(gc) > best_gain){
+                            best_gain = std::get<0>(gc);
+                            best_idx = std::get<1>(gc);
+                            best_feature = j;
+                            best_t = t;
+                        }
+                    };
                 } // end loop on feature
             };
         }

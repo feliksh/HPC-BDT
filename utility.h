@@ -19,6 +19,9 @@
 #define chrono_diff(b,e) std::chrono::duration_cast<std::chrono::milliseconds>(e-b)
 #define chrono_prec(b,e) std::chrono::duration_cast<std::chrono::microseconds>(e-b)
 
+int n_threads;
+bool enable_par;
+
 void transpose(std::vector<std::vector<float>> &data, std::vector<std::vector<float>> &transposed){
     for(int i=0; i<data.size(); ++i){
         for(int j=0; j<data[0].size(); ++j){
