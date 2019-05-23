@@ -1,7 +1,7 @@
 # HPC-BDT
 Multi-thread implementation of Boosted Decision Trees as described in [1].
 
-Project of High Performance Computing course 2018/2019,
+Project for High Performance Computing course 2018/2019,
 Ca' Foscari University,
 Venice
 
