@@ -100,7 +100,8 @@ int main(int argc, char* argv[]){
     double sum_rmse = 0;
 
     std::vector<float> gt;
-
+    std::cout << "testime\n";
+    /**
     std::vector<std::vector<float>> data = extract_data(&music, &gt, &N, &n_features, ',');
 
     // TODO: only for train set
@@ -179,18 +180,18 @@ int main(int argc, char* argv[]){
             sort_times[i] = train_elapsed.count();
 
             // start testing step
-            /**
-            auto test_begin = chrono_now;
-            double rmse = test<d, max_nr_tables>(test_set, test_gt, bdt, gt_mean, gt_std);
-            auto test_end = chrono_now;
-            auto test_elapsed = chrono_diff(test_begin, test_end);
+
+            // auto test_begin = chrono_now;
+            // double rmse = test<d, max_nr_tables>(test_set, test_gt, bdt, gt_mean, gt_std);
+            // auto test_end = chrono_now;
+            // auto test_elapsed = chrono_diff(test_begin, test_end);
 
             // std::cout << "Time test ("<< test_size <<" instances):\t" << test_elapsed.count() << "ms." << std::endl;
 
             //std::cout << "Shot: " << rmse << "/" << test_size << " (" << rmse/test_size << ")\n";
             //std::cout << "RMSE: " << rmse << "\n";
-            sum_rmse += rmse;
-            **/
+            // sum_rmse += rmse;
+
 
             //delete bdt;
         }
@@ -207,4 +208,6 @@ int main(int argc, char* argv[]){
 
     }
     // std::cout << "RMSE of test set: " << sum_rmse/n_runs << "\n";
+
+    **/
 }
