@@ -100,7 +100,6 @@ int main(int argc, char* argv[]){
     double sum_rmse = 0;
 
     std::vector<float> gt;
-    std::cout << "testime\n";
 
     std::vector<std::vector<float>> data = extract_data(&music, &gt, &N, &n_features, ',');
 
@@ -115,10 +114,6 @@ int main(int argc, char* argv[]){
     int validation_size = (train_size/10)*2;
     train_size -= validation_size;
 
-    std::cout << "train size: " << train_size << std::endl;
-    std::cout << "test size: " << test_size << std::endl;
-    std::cout << "valid size: " << validation_size << std::endl;
-    /**
     int max_threads = omp_get_max_threads();
     int num_procs = omp_get_num_procs();
     // std::cout << "OMP max threads: " << max_threads << std::endl;
@@ -213,5 +208,4 @@ int main(int argc, char* argv[]){
     }
     // std::cout << "RMSE of test set: " << sum_rmse/n_runs << "\n";
 
-    **/
 }
