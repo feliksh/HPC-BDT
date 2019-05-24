@@ -6,7 +6,7 @@
 #include <cstring>
 #include <sys/param.h>
 
-// #include "utility.h"
+#include "utility.h"
 
 #define shrink 0.05
 #define par_predict false
@@ -32,7 +32,8 @@ struct dt{
 
     ~dt() = default;
 
-    void fill_level(std::vector<int> &L, std::vector<float> &response, int feat, float cut, short level){
+    void fill_level(const std::vector<int> &L, const std::vector<float> &response,
+            int feat, float cut, short level){
         features[level] = feat;
         cuts[level] = cut;
         // TODO why updating if not last level? because of father!
@@ -40,16 +41,20 @@ struct dt{
     }
 
 
-    void update_predictions(std::vector<int> &L, std::vector<float> &response, int level){
+    void update_predictions(const std::vector<int> &L, const std::vector<float> &response, int level){
         unsigned long N = response.size();
         int count[1<<(level+1)];
         memset(count, 0, (1<<(level+1))*sizeof(int));
         memset(predictions, 0, (1<<d)*sizeof(float));
         // at this point, for level<d-1, values of L have been shifted by a bit, to prepare for next level
         if(level < d-1) {
-            for (int i = 0; i < N; ++i) {
-                predictions[L[i] >> 1] += response[i];
-                ++count[L[i] >> 1];
+            #pragma omp parallel if(enable_par && par_update)
+            {
+                #pragma omp for schedule(static)
+                for (int i = 0; i < N; ++i) {
+                    predictions[L[i] >> 1] += response[i];
+                    ++count[L[i] >> 1];
+                }
             }
             for(int i=0; i<(1<<(level+1)); ++i){
                 if(count[i] > 0)
@@ -58,9 +63,13 @@ struct dt{
                     father_prediction[i] = father_prediction[i>>1];
             }
         }else{ // for the last level, values of L are not shifted
-            for (int i = 0; i < N; ++i) {
-                predictions[L[i]] += response[i];
-                ++count[L[i]];
+            #pragma omp parallel if(enable_par && par_update)
+            {
+                #pragma omp for schedule(static)
+                for (int i = 0; i < N; ++i) {
+                    predictions[L[i]] += response[i];
+                    ++count[L[i]];
+                }
             }
         }
         for(int i=0; i<(1<<(level+1)); ++i) {

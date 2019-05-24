@@ -13,6 +13,7 @@
 #include "structs.h"
 #include "utility.h"
 #include "backfitting.h"
+#include "old_versions.h"
 
 std::chrono::milliseconds::rep time_holder(0);
 int time_counter(0);
@@ -246,7 +247,7 @@ bdt_scoring<d, t>* train(matrix& training_set, matrix& transposed_features, imat
     // TODO: add criterion to stop nr of tables
     // Create the initial decision table
     // dt<d> initial_dt = old_create_dt<d>(transposed_features, sorted_feats, runs, train_gt);
-    dt<d> initial_dt = create_dt<d>(transposed_features, sorted_feats, runs, train_gt);
+    dt<d> initial_dt = old_create_dt<d>(transposed_features, sorted_feats, runs, train_gt);
     dt<d> decision_tab; // for later
 
     // add it to the model, compute predictions, compute residuals
@@ -324,7 +325,7 @@ bdt_scoring<d, t>* train(matrix& training_set, matrix& transposed_features, imat
         // auto par_begin = chrono_now;
 
         // there is parallelism inside create_dt, so it's better not having this call inside pragma
-        decision_tab = create_dt<d>(transposed_features, sorted_feats, runs, residuals);
+        decision_tab = old_create_dt<d>(transposed_features, sorted_feats, runs, residuals);
         bdt_table->add_dt(decision_tab);
         rmse = 0;
 

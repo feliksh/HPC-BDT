@@ -5,11 +5,25 @@
 #ifndef HPC_BDT_OLD_VERSIONS_H
 #define HPC_BDT_OLD_VERSIONS_H
 
+#include <vector>
+#include <malloc.h>
+#include <tuple>
+#include <omp.h>
+#include <cfloat>
+#include "structs.h"
+#include "utility.h"
+#include "backfitting.h"
+
+
+typedef std::vector<std::vector<float>> matrix;
+typedef std::vector<std::vector<int>> imatrix;
+
 /**
  * This version with for loop takes in average 1300 ms.
  * The actual version with while loop and ptrs  950 ms.
  * TODO: try it with parallel
-igned short d>
+ **/
+template<unsigned short d>
 dt<d> old_create_dt(matrix& features, imatrix& sorted_features,
                 imatrix& runs, std::vector<float>& response){
     unsigned long N = sorted_features[0].size();
@@ -29,7 +43,7 @@ dt<d> old_create_dt(matrix& features, imatrix& sorted_features,
         best_gain=-LDBL_MAX, best_idx=0, best_feature=-1;
 
         // loop on features
-        #pragma omp parallel if(par_dt)
+        #pragma omp parallel if(enable_par && par_dt)
         {
             #pragma omp for schedule(dynamic)
             for(int j=0; j<n_feat; ++j){
@@ -38,11 +52,14 @@ dt<d> old_create_dt(matrix& features, imatrix& sorted_features,
                 std::tuple<long double, int> gc =
                         gain_on_feature(nr_leaves, N, L, response, sorted_features[j], runs[j], 1);
 
-                if(std::get<0>(gc) > best_gain){
-                    best_gain = std::get<0>(gc);
-                    best_idx = std::get<1>(gc);
-                    best_feature = j;
-                }
+                #pragma omp critical
+                {
+                    if (std::get<0>(gc) > best_gain) {
+                        best_gain = std::get<0>(gc);
+                        best_idx = std::get<1>(gc);
+                        best_feature = j;
+                    }
+                };
             } // end loop on feature
         };
 
@@ -52,22 +69,32 @@ dt<d> old_create_dt(matrix& features, imatrix& sorted_features,
 
         // This was transformed in a while loop, using pointers.
         if(t < d-1) {
-            for (int e=0; e<best_idx+1; ++e) {
-                int id = doc_ids[e];
-                L[id] -= 1;
-                L[id] <<= 1;
-                L[id] += 1;
-            }
-            best_point = doc_ids[best_idx];
-            for(int e=best_idx+1; e<N;++e){
-                int id = doc_ids[e];
-                L[id] <<= 1;
-                L[id] += 1;
+            #pragma omp parallel if(enable_par && par_dt2)
+            {
+                #pragma omp for schedule(static) nowait
+                for (int e = 0; e < best_idx + 1; ++e) {
+                    int id = doc_ids[e];
+                    L[id] -= 1;
+                    L[id] <<= 1;
+                    L[id] += 1;
+                }
+                #pragma omp single
+                best_point = doc_ids[best_idx];
+                #pragma omp for schedule(static)
+                for (int e = best_idx + 1; e < N; ++e) {
+                    int id = doc_ids[e];
+                    L[id] <<= 1;
+                    L[id] += 1;
+                }
             }
         }else{
-            for(int e=0; e<best_idx+1; ++e){
-                int id = doc_ids[e];
-                L[id] -= 1;
+            #pragma omp parallel if(enable_par && par_dt2)
+            {
+                #pragma omp for schedule(static)
+                for (int e = 0; e < best_idx + 1; ++e) {
+                    int id = doc_ids[e];
+                    L[id] -= 1;
+                }
             }
             best_point = doc_ids[best_idx];
         }
@@ -78,10 +105,14 @@ dt<d> old_create_dt(matrix& features, imatrix& sorted_features,
 
     }// end loop on level of tree
 
-    backfitting_cyclic(&result_dt, features, sorted_features, runs, L, response, 1);
+    for(int pass=0; pass<nr_backfitting_passes; ++pass) {
+        backfitting_cyclic(&result_dt, features, sorted_features, runs, L, response);
+        // backfitting_random(&result_dt, features, sorted_features, runs, L, response);
+        // backfitting_greedy(&result_dt, features, sorted_features, runs, L, response);
+    }
     return result_dt;
 }
-**/
+
 
 
 
