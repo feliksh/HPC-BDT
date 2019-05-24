@@ -129,7 +129,7 @@ int main(int argc, char* argv[]){
     myfile.close();
 
     enable_par=false;
-    for(n_threads=32; n_threads<=max_threads; n_threads=n_threads+2) {
+    for(n_threads=32; n_threads<=max_threads; n_threads=++n_threads) {
         if(n_threads==0) {
             omp_set_num_threads(1);
             enable_par=false;
