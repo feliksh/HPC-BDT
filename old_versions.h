@@ -22,7 +22,6 @@ typedef std::vector<std::vector<int>> imatrix;
  * This version with for loop takes in average 1300 ms.
  * The actual version with while loop and ptrs  950 ms.
  * TODO: try it with parallel
- **/
 template<unsigned short d>
 dt<d> old_create_dt(matrix& features, imatrix& sorted_features,
                 imatrix& runs, std::vector<float>& response){
@@ -112,7 +111,7 @@ dt<d> old_create_dt(matrix& features, imatrix& sorted_features,
     }
     return result_dt;
 }
-
+**/
 
 
 

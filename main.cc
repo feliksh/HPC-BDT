@@ -119,18 +119,17 @@ int main(int argc, char* argv[]){
     // std::cout << "OMP max threads: " << max_threads << std::endl;
     // std::cout << "OMP num procs: " << num_procs << std::endl;
 
-    std::string filename = "pdt2_" + std::to_string(omp_get_max_threads())+"th_"+
+    std::string filename = std::to_string(omp_get_max_threads())+"th_"+
             std::to_string(n_runs)+"r_"+std::to_string(d)+"d_"+std::to_string(max_nr_tables)+"t.csv";
     // std::string filename = "testfile.csv";
     std::ofstream myfile;
     myfile.open (filename, std::ios::app);
     myfile << "# Executing on " << num_procs << " processors, with " << max_threads << " threads\n";
-    myfile << "# with par_dt2\n";
     myfile << "threads,time\n";
     myfile.close();
 
     enable_par=false;
-    for(n_threads=0; n_threads<=max_threads; n_threads=n_threads+2) {
+    for(n_threads=32; n_threads<=max_threads; n_threads=n_threads+2) {
         if(n_threads==0) {
             omp_set_num_threads(1);
             enable_par=false;
@@ -192,7 +191,6 @@ int main(int argc, char* argv[]){
             //std::cout << "Shot: " << rmse << "/" << test_size << " (" << rmse/test_size << ")\n";
             //std::cout << "RMSE: " << rmse << "\n";
             // sum_rmse += rmse;
-
 
             //delete bdt;
         }

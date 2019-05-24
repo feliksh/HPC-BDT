@@ -12,7 +12,7 @@
 #define par_backfitting true
 #define par_validation true
 #define par_test false
-#define par_dt2 true
+#define par_dt2 false
 #define par_update false
 
 #define nr_backfitting_passes 1
