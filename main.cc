@@ -9,63 +9,8 @@
 #include <random>
 
 #include "structs.h"
+#include "utility.h"
 #include "bdt.h"
-
-/**
- *
- * @param data pointer to vector of vectors
- * @param result pointer to memory where datas are going to end up
- * @param N nr of data
- * @param n_feat nr of features
- */
-void transform(std::vector<std::vector<float>>& data, float* result, int N, int n_feat){
-    for(int i=0; i<N; ++i)
-        for(int j=0; j<n_feat; ++j)
-            result[(j*N)+i] = data[i][j];
-}
-
-
-std::vector<std::vector<float>> extract_data(const std::string *filename, std::vector<float> *response,
-                                             int* N, unsigned long* n_features, char sep){
-    std::vector<std::vector<float>> features;
-    std::vector<float> line_f;
-    int i=-1;
-    *n_features=0;
-    std::string line;
-
-    std::ifstream file;
-    file.open(*filename);
-
-    // read Header
-    if(file.good()) {
-        while (i != 0) {
-            std::getline(file, line, '\n');
-            for (char &it : line) if (it == sep) ++(*n_features);
-            i = 0;
-        }
-    }
-
-    if(file.good()) {
-        while (std::getline(file, line, sep)) {
-            ++i;
-            if(i!=*n_features) line_f.push_back(std::stof(line));
-            else{
-                line_f.push_back(std::stof(line));
-                features.push_back(line_f);
-                line_f.clear();
-                std::getline(file, line, '\n');
-                response->push_back(std::stof(line));
-                i = 0;
-                *N = *N + 1;
-            }
-        }
-    }
-    file.close();
-
-    return features;
-}
-
-
 
 int main(int argc, char* argv[]){
     /**
@@ -88,13 +33,13 @@ int main(int argc, char* argv[]){
     std::string toy = parent+"toy2.csv";
     std::string gender = parent+"gender.csv";
     std::string ai_example = parent+"ai.data";
-    int N=0, n_runs=10;
+    int N=0, n_runs=3;
     unsigned long n_features = 0;
     unsigned short const d=4;
-    int const max_nr_tables=20;
+    int const max_nr_tables=1;
     srand(23);
     n_threads=1;
-    enable_par=false;
+    par_value=0;
 
     std::vector <std::chrono::milliseconds::rep> sort_times(n_runs);
     double sum_rmse = 0;
@@ -103,7 +48,6 @@ int main(int argc, char* argv[]){
 
     std::vector<std::vector<float>> data = extract_data(&music, &gt, &N, &n_features, ',');
 
-    // TODO: only for train set
     float gt_mean;
     float gt_std;
 
@@ -119,27 +63,20 @@ int main(int argc, char* argv[]){
     // std::cout << "OMP max threads: " << max_threads << std::endl;
     // std::cout << "OMP num procs: " << num_procs << std::endl;
 
-    std::string filename = "bind_"+std::to_string(omp_get_max_threads())+"th_"+
-            std::to_string(n_runs)+"r_"+std::to_string(d)+"d_"+std::to_string(max_nr_tables)+"t.csv";
+    std::string filename = "par_levels_"+std::to_string(omp_get_max_threads())+"th_"+
+           std::to_string(n_runs)+"r_"+std::to_string(d)+"d_"+std::to_string(max_nr_tables)+"t.csv";
     // std::string filename = "testfile.csv";
     std::ofstream myfile;
     myfile.open (filename, std::ios::app);
-    myfile << "# Executing on " << num_procs << " processors, with " << max_threads
-    << " threads with proc_bind=true\n";
-    myfile << "threads,time\n";
+    myfile << "# Executing on " << num_procs << " processors, with " << max_threads << "\n";
+    myfile << "parvalue,time,std\n";
     myfile.close();
 
-    enable_par=false;
-    for(n_threads=0; n_threads<=max_threads; n_threads=++n_threads) {
-        if(n_threads==0) {
-            omp_set_num_threads(1);
-            enable_par=false;
-        }else{
-            omp_set_num_threads(n_threads);
-            enable_par=true;
-        }
+    omp_set_num_threads(max_threads);
+    std::cout << "Setting number of threads to " << n_threads << "\n";
 
-        std::cout << "Setting number of threads to " << n_threads << "\n";
+    for(par_value=0; par_value<6; ++par_value) {
+        std::cout << "Parallelization level: " << par_value << "\n";
         for (int i = 0; i < n_runs; ++i) {
             // take a random permutation of data
             shuffle_data(data, gt);
@@ -152,9 +89,6 @@ int main(int argc, char* argv[]){
             std::vector<float> train_gt(gt.begin(), gt.begin() + train_size);
             std::vector<float> validation_gt(gt.begin() + train_size, gt.begin() + train_size + validation_size);
             std::vector<float> test_gt(gt.begin() + train_size + validation_size, gt.end());
-
-            gt_mean = calc_mean(train_gt);
-            gt_std = calc_std(train_gt, gt_mean);
 
             // create a more memory compact structure and cache friendly (transposed)
             std::vector<std::vector<float>> transposed_features(n_features, std::vector<float>(train_size, 0));
@@ -171,9 +105,9 @@ int main(int argc, char* argv[]){
 
             // start learning step
             auto train_begin = chrono_now;
-            bdt_scoring<d, max_nr_tables> *bdt = train<d, max_nr_tables>(training_set, transposed_features,
-                                                                         sorted_feats,
-                                                                         runs, train_gt, validation_set, validation_gt);
+            bdt_scoring<d, max_nr_tables> *bdt =
+                    train<d, max_nr_tables>(training_set, transposed_features,sorted_feats,
+                            runs, train_gt, validation_set, validation_gt);
             auto train_end = chrono_now;
             auto train_elapsed = chrono_diff(train_begin, train_end);
             // std::cout << "Time train:\t" << train_elapsed.count() << "ms." << std::endl;
@@ -181,6 +115,9 @@ int main(int argc, char* argv[]){
             sort_times[i] = train_elapsed.count();
 
             // start testing step
+
+            // gt_mean = calc_mean(train_gt);
+            // gt_std = calc_std(train_gt, gt_mean);
 
             // auto test_begin = chrono_now;
             // double rmse = test<d, max_nr_tables>(test_set, test_gt, bdt, gt_mean, gt_std);
@@ -199,11 +136,18 @@ int main(int argc, char* argv[]){
         for (int i = 1; i < n_runs; ++i)
             mean_time += sort_times[i];
         mean_time /= n_runs;
+        auto std = sort_times[0];
+        std -= mean_time;
+        for(int i=1; i<n_runs; ++i){
+            std += std::pow(sort_times[i]-mean_time,2);
+        }
+        std /= n_runs;
+        std = std::sqrt(std);
         // std::cout << "avg time for par validation:\t" << time_holder/time_counter << "ms.\n";
-        std::cout << "Avg. Time for train:\t" << mean_time << "ms.\n";
+        std::cout << "Avg. Time for train:\t" << mean_time << "ms. [+/- " << std <<  "]\n";
 
         myfile.open(filename, std::ios::app);
-        myfile << n_threads << "," << mean_time << "\n";
+        myfile << n_threads << "," << mean_time << "," << std << "\n";
         myfile.close();
 
     }

@@ -159,7 +159,7 @@ dt<d> create_dt(matrix& features, imatrix& sorted_features,
         best_gain=-LDBL_MAX, best_idx=0, best_feature=-1;
 
         // loop on features
-        #pragma omp parallel if(enable_par && par_dt)
+        #pragma omp parallel if(par_dt<=par_value)
         {
             #pragma omp for schedule(dynamic)
             for(int j=0; j<n_feat; ++j){
@@ -254,7 +254,7 @@ bdt_scoring<d, t>* train(matrix& training_set, matrix& transposed_features, imat
     bdt_table->add_dt(initial_dt);
 
     // auto par_begin = chrono_now;
-    #pragma omp parallel if (enable_par && par_validation)
+    #pragma omp parallel if (par_validation <= par_value)
     {
         #pragma omp for schedule(static) nowait
         for (int e = 0; e < train_size; ++e) {
@@ -329,7 +329,7 @@ bdt_scoring<d, t>* train(matrix& training_set, matrix& transposed_features, imat
         bdt_table->add_dt(decision_tab);
         rmse = 0;
 
-        #pragma omp parallel if(enable_par && par_validation)
+        #pragma omp parallel if(par_validation<=par_value)
         {
             #pragma omp for schedule(static) nowait
             for (int e = 0; e < train_size; ++e) {
@@ -370,7 +370,7 @@ double test(matrix &test_set, std::vector<float> &ground_truth, bdt_scoring<d,t>
     //int correct=0;
 
     //std::cout << "\n\nTESTING:\n";
-    #pragma omp parallel if(enable_par && par_test)
+    #pragma omp parallel if(par_test<=par_value)
     {
         #pragma omp for schedule(static) reduction(+:rmse)
         for (int i = 0; i < test_size; ++i) {

@@ -27,7 +27,7 @@ void backfitting_cyclic(dt<d>* dt, const matrix& features, const imatrix& sorted
         // remove the cut
         for(int m=0; m<N; ++m) L[m] |= (1<<(d-t-1));
         // loop on features
-        #pragma omp parallel if(enable_par && par_backfitting)
+        #pragma omp parallel if(par_backfitting<=par_value)
         {
             #pragma omp for schedule(dynamic)
             for(int j=0; j<n_feat; ++j){
@@ -78,7 +78,7 @@ void backfitting_random(dt<d>* dt, const matrix& features, const imatrix& sorted
         last_t = t;
         for(int m=0; m<N; ++m) L[m] |= (1<<(d-t-1));
         // loop on features
-        #pragma omp parallel if(enable_par && par_backfitting)
+        #pragma omp parallel if(par_backfitting<=par_value)
         {
             #pragma omp for schedule(dynamic)
             for(int j=0; j<n_feat; ++j){
@@ -130,7 +130,7 @@ void backfitting_greedy(dt<d>* dt, const matrix& features, const imatrix& sorted
             // remove the cut
             for(int m=0; m<N; ++m) temp_L[m] |= (1<<(d-t-1));
             // loop on features
-            #pragma omp parallel if(enable_par && par_backfitting)
+            #pragma omp parallel if(par_backfitting<=par_value)
             {
                 #pragma omp for schedule(dynamic)
                 for(int j=0; j<n_feat; ++j){

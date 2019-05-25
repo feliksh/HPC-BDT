@@ -48,7 +48,7 @@ struct dt{
         memset(predictions, 0, (1<<d)*sizeof(float));
         // at this point, for level<d-1, values of L have been shifted by a bit, to prepare for next level
         if(level < d-1) {
-            #pragma omp parallel if(enable_par && par_update)
+            #pragma omp parallel if(par_update<=par_value)
             {
                 #pragma omp for schedule(static)
                 for (int i = 0; i < N; ++i) {
@@ -63,7 +63,7 @@ struct dt{
                     father_prediction[i] = father_prediction[i>>1];
             }
         }else{ // for the last level, values of L are not shifted
-            #pragma omp parallel if(enable_par && par_update)
+            #pragma omp parallel if(par_update<=par_value)
             {
                 #pragma omp for schedule(static)
                 for (int i = 0; i < N; ++i) {
@@ -139,7 +139,7 @@ struct bdt_scoring{
 
         // TODO: move the predict call externally, since dts[e] points for sure to a different memory ptr
         // static,1 ?
-        #pragma omp parallel for if(par_predict) schedule(static) reduction(+:prediction)
+        #pragma omp parallel for if(par_predict<=par_value) schedule(static) reduction(+:prediction)
         for (int e = 0; e < nr_tables; ++e) {
             // prediction += shrink * dts[e].predict(x);
             prediction += shrink * dts[e].predict(x);

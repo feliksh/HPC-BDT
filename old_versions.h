@@ -68,7 +68,7 @@ dt<d> old_create_dt(matrix& features, imatrix& sorted_features,
 
         // This was transformed in a while loop, using pointers.
         if(t < d-1) {
-            #pragma omp parallel if(enable_par && par_dt2)
+            #pragma omp parallel if(par_dt2<=par_value)
             {
                 #pragma omp for schedule(static) nowait
                 for (int e = 0; e < best_idx + 1; ++e) {
