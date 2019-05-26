@@ -86,58 +86,6 @@ std::tuple<long double, int> gain_on_feature(const int nr_leaves, const unsigned
     return std::make_tuple(best_gain, best_idx);
 }
 
-// TODO check static-ness
-/**
- * this function is called outside of the parallel part, thus it doesn't cause any nested loop.
- * it makes sense to parallelize as much as possible
- */
- /**
-// Cyclic backfitting
-template<unsigned short d>
-void backfitting_cyclic(dt<d>* dt, const matrix& features, const imatrix& sorted_features,
-                  const imatrix& runs, std::vector<int>& L, std::vector<float> &response){
-    unsigned long N = sorted_features[0].size();
-    unsigned long n_feat = sorted_features.size();
-    long double best_gain=-LDBL_MAX;
-    int best_idx=0, best_feature=-1;
-
-    for(int t=0; t<d; ++t){
-        best_gain=-LDBL_MAX;
-        // remove the cut
-        for(int m=0; m<N; ++m) L[m] |= (1<<(d-t-1));
-        // loop on features
-        #pragma omp parallel if(par_backfitting) shared(N,L,response,sorted_features,runs,t)
-        {
-            #pragma omp for schedule(dynamic)
-            for(int j=0; j<n_feat; ++j){
-                // loop on nr of values of that feature
-                // returns a tuple with (gain, idx on sorted feature j)
-                // TODO: check gain on t
-                std::tuple<long double, int> gc =
-                        gain_on_feature(1<<d, N, L, response, sorted_features[j], runs[j], 1<<(d-t-1));
-                // TODO: critical section?
-                if(std::get<0>(gc) > best_gain){
-                    best_gain = std::get<0>(gc);
-                    best_idx = std::get<1>(gc);
-                    best_feature = j;
-                }
-            } // end loop on feature
-        };
-        auto doc_id = sorted_features[best_feature].begin();
-        //auto end = sorted_features[best_feature].end();
-        auto best_point = doc_id+best_idx;
-        // update docs which have feature x_j > c
-        while(doc_id!=best_point){
-            L[*doc_id] -= (1<<(d-t-1));
-            ++doc_id;
-        }
-        float best_c = features[best_feature][*best_point];
-        (*dt).features[t] = best_feature;
-        (*dt).cuts[t] = best_c;
-    }
-    (*dt).update_predictions(L, response, d-1);
-}
-**/
 template<unsigned short d>
 dt<d> create_dt(matrix& features, imatrix& sorted_features,
                 imatrix& runs, std::vector<float>& response){

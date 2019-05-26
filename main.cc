@@ -35,7 +35,7 @@ int main(int argc, char* argv[]){
     std::string ai_example = parent+"ai.data";
     int N=0, n_runs=10;
     unsigned long n_features = 0;
-    unsigned short const d=4;
+    unsigned short const d=8;
     int const max_nr_tables=20;
     srand(23);
     n_threads=1;
@@ -63,20 +63,28 @@ int main(int argc, char* argv[]){
     // std::cout << "OMP max threads: " << max_threads << std::endl;
     // std::cout << "OMP num procs: " << num_procs << std::endl;
 
-    std::string filename = "par_levels_"+std::to_string(omp_get_max_threads())+"th_"+
+    std::string filename = std::to_string(omp_get_max_threads())+"th_"+
            std::to_string(n_runs)+"r_"+std::to_string(d)+"d_"+std::to_string(max_nr_tables)+"t.csv";
     // std::string filename = "testfile.csv";
     std::ofstream myfile;
     myfile.open (filename, std::ios::app);
     myfile << "# Executing on " << num_procs << " processors, with " << max_threads << "\n";
-    myfile << "parvalue,time,std\n";
+    myfile << "threads,time,std\n";
     myfile.close();
 
     omp_set_num_threads(max_threads);
     std::cout << "Setting number of threads to " << n_threads << "\n";
 
-    for(par_value=0; par_value<6; ++par_value) {
-        std::cout << "Parallelization level: " << par_value << "\n";
+    for(n_threads=0; n_threads<=max_threads; n_threads=n_threads+2) {
+        // std::cout << "Parallelization level: " << par_value << "\n";
+        if(n_threads==0) {
+            par_value=0;
+        }else{
+            par_value=3;
+            omp_set_num_threads(n_threads);
+        }
+        std::cout << "Setting number of threads to " << n_threads << "\n";
+
         for (int i = 0; i < n_runs; ++i) {
             // take a random permutation of data
             shuffle_data(data, gt);
