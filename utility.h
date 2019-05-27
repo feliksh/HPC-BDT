@@ -16,6 +16,7 @@
 #define par_test 6
 
 #define nr_backfitting_passes 1
+#define history_length 10
 
 #define chrono_now std::chrono::high_resolution_clock::now()
 #define chrono_diff(b,e) std::chrono::duration_cast<std::chrono::milliseconds>(e-b)
@@ -23,6 +24,8 @@
 
 int n_threads;
 int par_value;
+
+int stop_at;
 
 
 /**
@@ -169,7 +172,6 @@ void odd_even_index_sort(std::vector<float> &data, std::vector<int> &indices){
 }
 
 
-// TODO probably not critical section
 void sort_features(std::vector<std::vector<float>>& data,
                    std::vector<std::vector<int>>& runs,
                    std::vector<std::vector<int>>& sorted){
@@ -185,8 +187,7 @@ void sort_features(std::vector<std::vector<float>>& data,
             //odd_even_index_sort(data[feat], v);
             // TODO: execution policy
             std::sort(v.begin(), v.end(), [&](int i, int j) { return data[feat][i] > data[feat][j]; });
-            #pragma omp critical
-                sorted[feat].assign(v.begin(), v.end());
+            sorted[feat].assign(v.begin(), v.end());
             for (int i=0; i<n_feats-1; ++i) {
                 if (data[feat][v[i]] == data[feat][v[i+1]])
                     ++count;
@@ -196,8 +197,7 @@ void sort_features(std::vector<std::vector<float>>& data,
                 }
             }
             bob.push_back(count+1);
-            #pragma omp critical
-                runs[feat].assign(bob.begin(), bob.end());
+            runs[feat].assign(bob.begin(), bob.end());
             bob.clear();
         }
 }

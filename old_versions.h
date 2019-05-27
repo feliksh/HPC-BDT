@@ -42,7 +42,7 @@ dt<d> old_create_dt(matrix& features, imatrix& sorted_features,
         best_gain=-LDBL_MAX, best_idx=0, best_feature=-1;
 
         // loop on features
-        #pragma omp parallel if(enable_par && par_dt)
+        #pragma omp parallel if(par_dt<=par_value)
         {
             #pragma omp for schedule(dynamic)
             for(int j=0; j<n_feat; ++j){
@@ -61,6 +61,7 @@ dt<d> old_create_dt(matrix& features, imatrix& sorted_features,
                 };
             } // end loop on feature
         };
+
 
         // int best_point = sorted_features[best_feature][best_idx];
         int best_point;
@@ -87,7 +88,7 @@ dt<d> old_create_dt(matrix& features, imatrix& sorted_features,
                 }
             }
         }else{
-            #pragma omp parallel if(enable_par && par_dt2)
+            #pragma omp parallel if(par_dt2<=par_value)
             {
                 #pragma omp for schedule(static)
                 for (int e = 0; e < best_idx + 1; ++e) {
@@ -174,14 +175,18 @@ bdt_scoring<d, t>* train(matrix& training_set, matrix& transposed_features, imat
         // ################################## # # # #################################
 
         ** old version 1 **
-        for (int e = 0; e < train_size; ++e) {
-            residuals[e] = train_gt[e] - bdt_table->predict(training_set[e]);
+        #pragma omp parallel if(par_validation<=par_value)
+        {
+            #pragma omp for schedule(static)
+            for (int e = 0; e < train_size; ++e) {
+              residuals[e] = train_gt[e] - bdt_table->predict(training_set[e]);
+            }
         }
         ** end old ver1 **
 
 
         auto par_begin = chrono_now;
-        ** old version 2 ** // I think there is improvement
+        ** old version 2 **
         #pragma omp parallel if(par_validation)
         {
             std::vector<float> predictions(train_size);
@@ -195,11 +200,6 @@ bdt_scoring<d, t>* train(matrix& training_set, matrix& transposed_features, imat
             }
         }
         ** end old ver2 **
-        auto par_end = chrono_now;
-        auto par_elapsed = chrono_diff(par_begin, par_end);
-        std::cout << "table " << tab << ":\t" << par_elapsed.count() << "ms.\n";
-        time_holder += par_elapsed.count();
-        ++time_counter;
 
         // calculare rmse on validation set
         rmse = 0;

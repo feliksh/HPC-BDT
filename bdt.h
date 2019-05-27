@@ -15,8 +15,6 @@
 #include "backfitting.h"
 #include "old_versions.h"
 
-std::chrono::milliseconds::rep time_holder(0);
-int time_counter(0);
 
 /**
  * static
@@ -189,6 +187,8 @@ bdt_scoring<d, t>* train(matrix& training_set, matrix& transposed_features, imat
     bdt_table = new bdt_scoring<d, t>();
     std::vector<float> residuals(train_size, 0);
     std::vector<float> prediction(train_size + validation_size, 0);
+    std::vector<float> last_rmses(history_length, FLT_MAX);
+    int last_rmse_idx=0;
     float rmse = 0, best_rmse = 0;
     int best_nr_of_dt = 0;
 
@@ -201,7 +201,6 @@ bdt_scoring<d, t>* train(matrix& training_set, matrix& transposed_features, imat
     // add it to the model, compute predictions, compute residuals
     bdt_table->add_dt(initial_dt);
 
-    // auto par_begin = chrono_now;
     #pragma omp parallel if (par_validation <= par_value)
     {
         #pragma omp for schedule(static) nowait
@@ -227,6 +226,8 @@ bdt_scoring<d, t>* train(matrix& training_set, matrix& transposed_features, imat
     rmse /= validation_size;
     rmse = std::sqrt(rmse);
     best_rmse = rmse;
+    last_rmses[last_rmse_idx] = rmse;
+    last_rmse_idx = (last_rmse_idx+1)%history_length ;
     // std::cout << "RMSE at lv 0: " << rmse << std::endl;
     // initial_dt.printer();
 
@@ -235,7 +236,8 @@ bdt_scoring<d, t>* train(matrix& training_set, matrix& transposed_features, imat
     // TODO: make these vectors const
     // TODO: ordered
 
-    for (int tab = 1; tab < t; ++tab) {
+    bool improve=true;
+    for (int tab = 1; tab < t && tab <= stop_at; ++tab) {
         // update residuals
         /** old version 1 **
         for (int e = 0; e < train_size; ++e) {
@@ -296,23 +298,37 @@ bdt_scoring<d, t>* train(matrix& training_set, matrix& transposed_features, imat
 
         rmse /= validation_size;
         rmse = std::sqrt(rmse);
+
         if (rmse < best_rmse) {
             best_rmse = rmse;
             best_nr_of_dt = tab;
         }
+
+        last_rmses[last_rmse_idx] = rmse;
+        last_rmse_idx = (last_rmse_idx+1)%history_length;
+        // check whether the actual rmse is the worse of the last recorded rmses
+        bool better=false;
+        for(int e=0; e<history_length; ++e) {
+            if (last_rmses[e] > rmse) better = true;
+        }
+        // if it is the worse of the last 'history_length', stop!
+        improve=better;
+
     }
 
     // std::cout << "Avg. time spent on last part:\t" << time_holder/time_counter << "ms.\n";
 
-    bdt_table->set_optimal_nr_tables(best_nr_of_dt);
+    // TODO: de-comment
+    // bdt_table->set_optimal_nr_tables(best_nr_of_dt);
+
     // std::cout << "Optimal nr of dt: " << best_nr_of_dt+1 << "\n";
     // std::cout << "Time dt: " << dt_elapsed.count() << "ms.\n";
     return bdt_table;
 }
 
 template<unsigned d, unsigned short t>
-double test(matrix &test_set, std::vector<float> &ground_truth, bdt_scoring<d,t> *bdt_table,
-        float gt_mean, float gt_std){
+double test(const matrix &test_set, const std::vector<float> &ground_truth, bdt_scoring<d,t> *bdt_table,
+        const float gt_mean, const float gt_std){
     unsigned long test_size = test_set.size();
     double rmse = 0;
     //int correct=0;
