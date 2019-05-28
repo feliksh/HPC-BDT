@@ -331,9 +331,7 @@ double test(const matrix &test_set, const std::vector<float> &ground_truth, bdt_
         const float gt_mean, const float gt_std){
     unsigned long test_size = test_set.size();
     double rmse = 0;
-    //int correct=0;
 
-    //std::cout << "\n\nTESTING:\n";
     #pragma omp parallel if(par_test<=par_value)
     {
         #pragma omp for schedule(static) reduction(+:rmse)
