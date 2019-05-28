@@ -21,7 +21,6 @@ typedef std::vector<std::vector<int>> imatrix;
 /**
  * This version with for loop takes in average 1300 ms.
  * The actual version with while loop and ptrs  950 ms.
- * TODO: try it with parallel
 template<unsigned short d>
 dt<d> old_create_dt(matrix& features, imatrix& sorted_features,
                 imatrix& runs, std::vector<float>& response){
@@ -63,7 +62,6 @@ dt<d> old_create_dt(matrix& features, imatrix& sorted_features,
         };
 
 
-        // int best_point = sorted_features[best_feature][best_idx];
         int best_point;
         auto doc_ids = sorted_features[best_feature];
 
@@ -134,13 +132,9 @@ bdt_scoring<d, t>* train(matrix& training_set, matrix& transposed_features, imat
     float rmse=0, best_rmse=0;
     int best_nr_of_dt=0;
 
-    // TODO: add criterion to stop nr of tables
     // Create the initial decision table
-    auto dt_begin = chrono_now;
     // dt<d> initial_dt = old_create_dt<d>(transposed_features, sorted_feats, runs, train_gt);
     dt<d> initial_dt = create_dt<d>(transposed_features, sorted_feats, runs, train_gt);
-    auto dt_end = chrono_now;
-    auto dt_elapsed = chrono_diff(dt_begin, dt_end);
 
     // add it to the model and calculate residuals
     bdt_table->add_dt(initial_dt);
@@ -159,20 +153,12 @@ bdt_scoring<d, t>* train(matrix& training_set, matrix& transposed_features, imat
     rmse /= validation_size;
     rmse = std::sqrt(rmse);
     best_rmse = rmse;
-    // std::cout << "RMSE at lv 0: " << rmse << std::endl;
-    // initial_dt.printer();
 
     // procede for successive decision tables
-    // TODO: make predict a vector and update as nr of tables grows
-    // TODO: make these vectors const
-    // TODO: ordered
     for (int tab = 1; tab < t; ++tab) {
         dt<d> decision_tab = create_dt<d>(transposed_features, sorted_feats, runs, residuals);
-        bdt_table->add_dt(decision_tab); // TODO: single
+        bdt_table->add_dt(decision_tab);
         // update residuals
-
-        // ################################### HERE ###################################
-        // ################################## # # # #################################
 
         ** old version 1 **
         #pragma omp parallel if(par_validation<=par_value)
@@ -210,23 +196,16 @@ bdt_scoring<d, t>* train(matrix& training_set, matrix& transposed_features, imat
             rmse += std::pow(difference, 2);
         }
 
-        // TODO: last one should make this, also overcomes critical section
         rmse /= validation_size;
         rmse = std::sqrt(rmse);
         if (rmse < best_rmse) {
             best_rmse = rmse;
             best_nr_of_dt = tab;
         }
-        if (tab % 10 == 0)
-            std::cout << "RMSE at lv " << tab << ": " << rmse << std::endl;
-        // decision_tab.printer();
     }
 
-    std::cout << "Avg. time spent on last part:\t" << time_holder/time_counter << "ms.\n";
 
     bdt_table->set_optimal_nr_tables(best_nr_of_dt);
-    // std::cout << "Optimal nr of dt: " << best_nr_of_dt+1 << "\n";
-    // std::cout << "Time dt: " << dt_elapsed.count() << "ms.\n";
     return bdt_table;
 }
 **/

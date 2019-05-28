@@ -2,8 +2,6 @@
 #ifndef HPC_BDT_UTILITY_H
 #define HPC_BDT_UTILITY_H
 
-//#include "bdt.h" //TODO: why this include + move extract data here
-
 #define swape(x,y){temp=x;x=y;y=temp;}
 #define swtemp(x,y,z){temp=x;x=y;y=temp;}
 
@@ -22,10 +20,7 @@
 #define chrono_diff(b,e) std::chrono::duration_cast<std::chrono::milliseconds>(e-b)
 #define chrono_prec(b,e) std::chrono::duration_cast<std::chrono::microseconds>(e-b)
 
-int n_threads;
 int par_value;
-
-int stop_at;
 
 
 /**
@@ -41,7 +36,7 @@ void transform(std::vector<std::vector<float>>& data, float* result, int N, int 
             result[(j*N)+i] = data[i][j];
 }
 
-
+// the response value should be the last value of the column
 std::vector<std::vector<float>> extract_data(const std::string *filename, std::vector<float> *response,
                                              int* N, unsigned long* n_features, char sep){
     std::vector<std::vector<float>> features;
@@ -185,7 +180,7 @@ void sort_features(std::vector<std::vector<float>>& data,
 
             std::iota(v.begin(), v.end(), 0);
             //odd_even_index_sort(data[feat], v);
-            // TODO: execution policy
+            // TODO: try execution policies for std::sort
             std::sort(v.begin(), v.end(), [&](int i, int j) { return data[feat][i] > data[feat][j]; });
             sorted[feat].assign(v.begin(), v.end());
             for (int i=0; i<n_feats-1; ++i) {

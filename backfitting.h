@@ -45,7 +45,6 @@ void backfitting_cyclic(dt<d>* dt, const matrix& features, const imatrix& sorted
             } // end loop on feature
         };
         auto doc_id = sorted_features[best_feature].begin();
-        //auto end = sorted_features[best_feature].end();
         auto best_point = doc_id+best_idx;
         // update docs which have feature x_j > c
         while(doc_id!=best_point){
@@ -84,7 +83,6 @@ void backfitting_random(dt<d>* dt, const matrix& features, const imatrix& sorted
             for(int j=0; j<n_feat; ++j){
                 // loop on nr of values of that feature
                 // returns a tuple with (gain, idx on sorted feature j)
-                // TODO: check gain on t
                 std::tuple<long double, int> gc =
                         gain_on_feature(1<<d, N, L, response, sorted_features[j], runs[j], 1<<(d-t-1));
                 #pragma omp critical
@@ -98,7 +96,6 @@ void backfitting_random(dt<d>* dt, const matrix& features, const imatrix& sorted
             } // end loop on feature
         };
         auto doc_id = sorted_features[best_feature].begin();
-        //auto end = sorted_features[best_feature].end();
         auto best_point = doc_id+best_idx;
         // update docs which have feature x_j > c
         while(doc_id!=best_point){
@@ -157,7 +154,6 @@ void backfitting_greedy(dt<d>* dt, const matrix& features, const imatrix& sorted
         for(int m=0; m<N; ++m) L[m] |= (1<<(d-best_t-1));
 
         auto doc_id = sorted_features[best_feature].begin();
-        //auto end = sorted_features[best_feature].end();
         auto best_point = doc_id+best_idx;
         // update docs which have feature x_j > c
         while(doc_id!=best_point){

@@ -17,11 +17,11 @@ typedef std::vector<std::vector<int>> imatrix;
 
 template <unsigned short d>
 struct dt{
-    // TODO: usare matrice invece di 2 vettori per spazialita cache
+    // can think of using a matrix instead of 2 vectors for a better caching
     int features[d];
     float cuts[d];
     float predictions[1<<d]; //size 2^d
-    float father_prediction[1<<(d-1)]; // TODO: fixed size to avoid many allocations
+    float father_prediction[1<<(d-1)]; // fixed size to avoid many allocations
 
     dt(){
         memset(features, 0, d*sizeof(unsigned int));
@@ -36,7 +36,6 @@ struct dt{
             int feat, float cut, short level){
         features[level] = feat;
         cuts[level] = cut;
-        // TODO why updating if not last level? because of father!
         update_predictions(L, response, level);
     }
 
@@ -82,7 +81,7 @@ struct dt{
         }
     }
 
-
+    // for debugging purposes
     void printer(){
         for(int i=0; i<d; ++i) std::cout << features[i] << "\t-> " << cuts[i] << std::endl;
         for(int i=(1<<d)-1; i>=0; --i) std::cout << "(" << i << "):" << predictions[i] << " ";
@@ -95,22 +94,6 @@ struct dt{
             if (feature[features[i]] <= cuts[i])
                 idx |= (1<<i);
         }
-        return predictions[idx];
-    }
-
-    float printpredict(const std::vector<float>& feature){
-        int idx = 0;
-        std::cout << "feature: ";
-        for(const float &f: feature)
-            std::cout << f << " ";
-        std::cout << "\n";
-        for(unsigned i=0; i<d; ++i){
-            if (feature[features[i]] <= cuts[i]) {
-                idx |= (1 << i);
-                std::cout << "feature " << features[i] << " cut: " << cuts[i] << " orred " << (1<<i) << "\n";
-            }
-        }
-        std::cout << "predicted idx: " << idx << " value: " << predictions[idx] << "\n";
         return predictions[idx];
     }
 };
@@ -130,8 +113,6 @@ struct bdt_scoring{
     void add_dt(dt<d> new_dt){
         dts.push_back(new_dt);
         ++nr_tables;
-        //dts.push_back(*new_dt);
-        // new_dt.printer();
     }
 
     float predict(const std::vector<float>& x){
@@ -139,24 +120,15 @@ struct bdt_scoring{
 
         #pragma omp parallel for if(par_predict<=par_value) schedule(static) reduction(+:prediction)
         for (int e = 0; e < nr_tables; ++e) {
-            // prediction += shrink * dts[e].predict(x);
             prediction += shrink * dts[e].predict(x);
         }
 
         return prediction;
     }
 
-    // TODO: remove remaining tables?
+    // can easily remove remaining tables if desired
     void set_optimal_nr_tables(int optimal_nr_tables){
         nr_tables = optimal_nr_tables;
-    }
-
-    void looper(const std::vector<float>& x){
-        for(typename std::vector<dt<d>>::iterator it = (*dts).begin(); it != (*dts).end(); ++it){
-            (*it).printer();
-            (*it).printpredict(x);
-            std::cout << "\n";
-        }
     }
 };
 
