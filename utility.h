@@ -11,9 +11,9 @@
 #define par_dt 1
 #define par_backfitting 2
 #define par_validation 3
-#define par_update 4
-#define par_dt2 5
-#define par_test 6
+#define par_test 4
+#define par_update 5
+#define par_dt2 6
 
 #define nr_backfitting_passes 1
 #define history_length 10

@@ -237,7 +237,7 @@ bdt_scoring<d, t>* train(matrix& training_set, matrix& transposed_features, imat
     // TODO: ordered
 
     bool improve=true;
-    for (int tab = 1; tab < t && tab <= stop_at; ++tab) {
+    for (int tab = 1; tab < t; ++tab) {
         // update residuals
         /** old version 1 **
         for (int e = 0; e < train_size; ++e) {
@@ -338,8 +338,6 @@ double test(const matrix &test_set, const std::vector<float> &ground_truth, bdt_
     {
         #pragma omp for schedule(static) reduction(+:rmse)
         for (int i = 0; i < test_size; ++i) {
-            //if(i==0) bdt_table.looper(test_set[i]);
-            //if(i==0) std::cout << "PREDICTION: " << ground_truth[0] << ", GT: " << ground_truth[0] << "\n";
             float resp = bdt_table->predict(test_set[i]);
             rmse += std::pow(((resp - ground_truth[i]) - gt_mean) / gt_std, 2);
         }

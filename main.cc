@@ -64,18 +64,18 @@ int main(int argc, char* argv[]){
     // std::cout << "OMP max threads: " << max_threads << std::endl;
     // std::cout << "OMP num procs: " << num_procs << std::endl;
 
-    std::string filename = "rmse_"+std::to_string(omp_get_max_threads())+"th_"+
+    std::string filename = "time_test_"+std::to_string(omp_get_max_threads())+"th_"+
            std::to_string(n_runs)+"r_"+std::to_string(d)+"d_"+std::to_string(max_nr_tables)+"t.csv";
     // std::string filename = "testfile.csv";
 
     std::ofstream myfile;
     myfile.open (filename, std::ios::app);
-    myfile << "# Executing on " << max_threads << "threads; testing on " << test_size << " instances\n";
-    myfile << "tables,rmse\n";
+    myfile << "# Executing on sequential mode; testing on " << test_size << " instances\n";
+    myfile << "tables,time\n";
     myfile.close();
 
     omp_set_num_threads(max_threads);
-    std::cout << "Setting number of threads to " << max_threads << "\n";
+    // std::cout << "Setting number of threads to " << max_threads << "\n";
     par_value=3;
 
     // take a random permutation of data
@@ -103,51 +103,55 @@ int main(int argc, char* argv[]){
     //auto sort_elapsed = chrono_diff(sort_begin, sort_end);
     // std::cout << "Time sort:\t" << sort_elapsed.count() << "ms." << std::endl;
 
-    for(stop_at=1; stop_at<200; ++stop_at) {
-        // start learning step
-        // auto time_begin = chrono_now;
-        bdt_scoring<d, max_nr_tables> *bdt =
-                train<d, max_nr_tables>(training_set, transposed_features, sorted_feats,
-                                        runs, train_gt, validation_set, validation_gt);
-        // auto time_end = chrono_now;
-        // auto time_elapsed = chrono_diff(time_begin, time_end);
-        // std::cout << "Time train:\t" << train_elapsed.count() << "ms." << std::endl;
+    // for(stop_at=1; stop_at<200; ++stop_at) {
+    // start learning step
+    // auto time_begin = chrono_now;
+    bdt_scoring<d, max_nr_tables> *bdt =
+            train<d, max_nr_tables>(training_set, transposed_features, sorted_feats,
+                                    runs, train_gt, validation_set, validation_gt);
+    // auto time_end = chrono_now;
+    // auto time_elapsed = chrono_diff(time_begin, time_end);
+    // std::cout << "Time train:\t" << train_elapsed.count() << "ms." << std::endl;
 
-        // start testing step
+    // start testing step
 
-        gt_mean = calc_mean(train_gt);
-        gt_std = calc_std(train_gt, gt_mean);
+    gt_mean = calc_mean(train_gt);
+    gt_std = calc_std(train_gt, gt_mean);
 
-        // auto test_begin = chrono_now;
+    for(int tables_used=10; tables_used<=200; tables_used=tables_used+10) {
+
+        bdt->set_optimal_nr_tables(tables_used);
+
+        auto test_begin = chrono_now;
         double rmse = test<d, max_nr_tables>(test_set, test_gt, bdt, gt_mean, gt_std);
-        // auto test_end = chrono_now;
-        // auto test_elapsed = chrono_diff(test_begin, test_end);
+        auto test_end = chrono_now;
+        auto test_elapsed = chrono_diff(test_begin, test_end);
 
         myfile.open(filename, std::ios::app);
-        myfile << stop_at << "," << rmse << "\n";
+        myfile << tables_used << "," << test_elapsed.count() << "\n";
         myfile.close();
-
-        // std::cout << "Time test ("<< test_size <<" instances):\t" << test_elapsed.count() << "ms." << std::endl;
-        //std::cout << "Shot: " << rmse << "/" << test_size << " (" << rmse/test_size << ")\n";
-        //delete bdt;
-
-        /**
-        auto mean_time = sort_times[0];
-        for (int i = 1; i < n_runs; ++i) {
-            mean_time += sort_times[i];
-        }
-        mean_time /= n_runs;
-        auto tstd = sort_times[0];
-        tstd -= mean_time; // TODO: mh?
-        for (int i = 1; i < n_runs; ++i) {
-            tstd += std::pow(sort_times[i] - mean_time, 2);
-        }
-        tstd /= n_runs;
-        tstd = std::sqrt(tstd);
-        // std::cout << "avg time for par validation:\t" << time_holder/time_counter << "ms.\n";
-        // std::cout << "Avg. Time for train:\t" << mean_time << "ms. [+/- " << std <<  "]\n";
-        **/
     }
+
+    // std::cout << "Time test ("<< test_size <<" instances):\t" << test_elapsed.count() << "ms." << std::endl;
+    //std::cout << "Shot: " << rmse << "/" << test_size << " (" << rmse/test_size << ")\n";
+    //delete bdt;
+
+    /**
+    auto mean_time = sort_times[0];
+    for (int i = 1; i < n_runs; ++i) {
+        mean_time += sort_times[i];
+    }
+    mean_time /= n_runs;
+    auto tstd = sort_times[0];
+    tstd -= mean_time; // TODO: mh?
+    for (int i = 1; i < n_runs; ++i) {
+        tstd += std::pow(sort_times[i] - mean_time, 2);
+    }
+    tstd /= n_runs;
+    tstd = std::sqrt(tstd);
+    // std::cout << "avg time for par validation:\t" << time_holder/time_counter << "ms.\n";
+    // std::cout << "Avg. Time for train:\t" << mean_time << "ms. [+/- " << std <<  "]\n";
+    **/
 
     // std::cout << "RMSE of test set: " << sum_rmse/n_runs << "\n";
 

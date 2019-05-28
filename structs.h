@@ -137,23 +137,12 @@ struct bdt_scoring{
     float predict(const std::vector<float>& x){
         float prediction=0;
 
-        // TODO: move the predict call externally, since dts[e] points for sure to a different memory ptr
-        // static,1 ?
         #pragma omp parallel for if(par_predict<=par_value) schedule(static) reduction(+:prediction)
         for (int e = 0; e < nr_tables; ++e) {
             // prediction += shrink * dts[e].predict(x);
             prediction += shrink * dts[e].predict(x);
         }
 
-        /** TODO: should be faster and more optimizable and parallelizable to have a normal for loop
-
-        auto beg = dts.begin();
-        auto end = dts.begin()+nr_tables;
-
-        for(typename std::vector<dt<d>>::iterator it = beg; it != end; ++it){
-            prediction += shrink*(*it).predict(x);
-        }
-         **/
         return prediction;
     }
 
