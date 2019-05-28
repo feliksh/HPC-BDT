@@ -33,7 +33,7 @@ int main(int argc, char* argv[]){
     std::string toy = parent+"toy2.csv";
     std::string gender = parent+"gender.csv";
     std::string ai_example = parent+"ai.data";
-    int N=0, n_runs=1;
+    int N=0, n_runs=10;
     unsigned long n_features = 0;
     unsigned short const d=4;
     int const max_nr_tables=400;
@@ -42,8 +42,6 @@ int main(int argc, char* argv[]){
     par_value=0;
 
     std::vector <std::chrono::milliseconds::rep> sort_times(n_runs);
-    std::vector <double> rmse_runs(n_runs, 0);
-    double sum_rmse = 0;
 
     std::vector<float> gt;
 
@@ -72,7 +70,7 @@ int main(int argc, char* argv[]){
     myfile.open (filename, std::ios::app);
     myfile << "# Executing on " << max_threads << " threads; testing(pat_test) on "
     << test_size << " instances\n";
-    myfile << "tables,time\n";
+    myfile << "tables,time,std\n";
     myfile.close();
 
     omp_set_num_threads(max_threads);
@@ -122,14 +120,33 @@ int main(int argc, char* argv[]){
     for(int tables_used=20; tables_used<=400; tables_used=tables_used+20) {
 
         bdt->set_optimal_nr_tables(tables_used);
+        for(int run=0; run<n_runs; ++run) {
+            auto test_begin = chrono_now;
+            double rmse = test<d, max_nr_tables>(test_set, test_gt, bdt, gt_mean, gt_std);
+            auto test_end = chrono_now;
+            auto test_elapsed = chrono_diff(test_begin, test_end);
+            sort_times[run] = test_elapsed.count();
+        }
 
-        auto test_begin = chrono_now;
-        double rmse = test<d, max_nr_tables>(test_set, test_gt, bdt, gt_mean, gt_std);
-        auto test_end = chrono_now;
-        auto test_elapsed = chrono_diff(test_begin, test_end);
+        if(tables_used==20 || tables_used==100){
+            for(int e=0; e<n_runs; ++e)
+                std::cout << e << ": " << sort_times[e] << "ms.\n";
+        }
+
+        auto mean_time = sort_times[0];
+        for (int i = 1; i < n_runs; ++i) {
+            mean_time += sort_times[i];
+        }
+        mean_time /= n_runs;
+        auto tstd = std::pow(sort_times[0]-mean_time, 2);
+        for (int i = 1; i < n_runs; ++i) {
+            tstd += std::pow(sort_times[i]-mean_time, 2);
+        }
+        tstd /= n_runs;
+        tstd = std::sqrt(tstd);
 
         myfile.open(filename, std::ios::app);
-        myfile << tables_used << "," << test_elapsed.count() << "\n";
+        myfile << tables_used << "," << mean_time << "," << tstd << "\n";
         myfile.close();
     }
 
