@@ -1,8 +1,8 @@
-# Multi-thread implementation of Boosted Decision Trees as described in [1].
+# HPC Project: Multi-thread implementation of BDT [1].
 
 Project for High Performance Computing course 2018/2019 at Ca' Foscari University.
 
-Improvement achieved:
+**Improvement achieved:**
 - **Speedup 25x**: modifying algorithm for better multi-threading execution
 - **Speedup 31x**: cache-aware implementation of important functions
 
