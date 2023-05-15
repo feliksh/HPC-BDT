@@ -1,6 +1,8 @@
 # HPC Project: Multi-thread implementation of BDT [1].
 
-Project for High Performance Computing course 2018/2019 at Ca' Foscari University.
+Project for _High Performance Computing_ course 2018/2019 at Ca' Foscari University.
+
+The project consists in implementing the method described in [1], and experimenting on ways to improve execution time.
 
 **Improvement achieved:**
 - **Speedup 25x**: modifying algorithm for better multi-threading execution
