@@ -2,7 +2,7 @@
 
 Project for _High Performance Computing_ course 2018/2019 at Ca' Foscari University.
 
-The project consists in implementing the method described in [1], and experimenting on ways to improve execution time.\
+The project consists of implementing the method described in [1], and experimenting on ways to improve execution time.\
 See [report](https://github.com/feliksh/HPC-BDT/blob/master/HPC_Feliks_Hibraj.pdf) for detailed explaination
 
 **Improvement achieved:**
