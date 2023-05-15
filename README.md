@@ -8,6 +8,11 @@ The project consists in implementing the method described in [1], and experiment
 - **Speedup 25x**: modifying algorithm for better multi-threading execution
 - **Speedup 31x**: cache-aware implementation of important functions
 
+<p float="left">
+  <img src="screenshot1.png" width="400">
+  <img src="screenshot2.png" width="400">
+</p>
+
 See [report](https://github.com/feliksh/HPC-BDT/blob/master/HPC_Feliks_Hibraj.pdf) for detailed explaination
 
 
