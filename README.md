@@ -8,6 +8,7 @@ The project consists in implementing the method described in [1], and experiment
 - **Speedup 25x**: modifying algorithm for better multi-threading execution
 - **Speedup 31x**: cache-aware implementation of important functions
 
+See [report](https://github.com/feliksh/HPC-BDT/blob/master/HPC_Feliks_Hibraj.pdf) for detailed explaination
 
 
 [1] Lou, Yin, and Mikhail Obukhov. "BDT: Gradient Boosted Decision Tables for High Accuracy and Scoring Efficiency." Proceedings of the 23rd ACM SIGKDD International Conference on Knowledge Discovery and Data Mining. ACM, 2017.
